@@ -21,7 +21,7 @@ import {
 // URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
 // Quando você hospedar o backend de verdade (Railway, Render, etc.), troque
 // esse valor pela URL pública dele.
-const API_URL = "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 // ---------- Design tokens ----------
 const INK = "#14171F";
