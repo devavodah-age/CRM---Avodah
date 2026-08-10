@@ -1,7 +1,7 @@
 {
   "name": "pulso-crm-backend",
   "version": "1.0.0",
-  "description": "Backend do Pulso CRM com PostgreSQL",
+  "description": "Backend do Pulso CRM com PostgreSQL e WhatsApp",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {
@@ -13,6 +13,10 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode": "^1.5.4",
+    "pino": "^8.21.0",
+    "@hapi/boom": "^10.0.1"
   }
 }
