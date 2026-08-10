@@ -45,6 +45,13 @@ async function initDb() {
       action_text TEXT NOT NULL,
       enabled BOOLEAN NOT NULL DEFAULT TRUE
     );
+    CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+      company_id INTEGER PRIMARY KEY REFERENCES companies(id),
+      creds JSONB,
+      keys JSONB,
+      status TEXT NOT NULL DEFAULT 'disconnected',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
   console.log('Banco inicializado.');
 }
