@@ -1,11 +1,11 @@
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, initAuthCreds } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const QRCode = require('qrcode');
 const pool = require('./db');
 
 process.on('uncaughtException', (err) => {
-  console.error('[WA] uncaughtException:', err.message);
+  console.error('[WA] uncaughtException:', err.message, err.stack);
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[WA] unhandledRejection:', reason?.message || reason);
@@ -19,6 +19,12 @@ async function loadAuthState(companyId) {
     if (!res.rows.length) return { creds: null, keys: {} };
     return { creds: res.rows[0].creds, keys: res.rows[0].keys || {} };
   } catch (e) { console.error('[WA] loadAuthState error:', e.message); return { creds: null, keys: {} }; }
+}
+
+async function clearAuthState(companyId) {
+  try {
+    await pool.query(`DELETE FROM whatsapp_sessions WHERE company_id=$1`, [companyId]);
+  } catch {}
 }
 
 async function saveAuthState(companyId, creds, keys) {
@@ -75,12 +81,13 @@ async function connectWhatsApp(companyId) {
     console.log('[WA] Already connecting/connected, skipping');
     return;
   }
-  if (existing && existing.socket) {
+  if (existing?.socket) {
     try { existing.socket.end(undefined); } catch {}
   }
 
   const { creds: savedCreds, keys: savedKeys } = await loadAuthState(companyId);
-  console.log('[WA] Auth state loaded, hasCreds:', !!savedCreds);
+  const freshCreds = savedCreds || initAuthCreds();
+  console.log('[WA] Auth state loaded, hasSavedCreds:', !!savedCreds);
 
   let version;
   try {
@@ -92,7 +99,7 @@ async function connectWhatsApp(companyId) {
     version = [2, 3000, 1015901307];
   }
 
-  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: savedCreds };
+  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds };
   connections.set(companyId, conn);
 
   const logger = pino({ level: 'silent' });
@@ -103,12 +110,15 @@ async function connectWhatsApp(companyId) {
       version,
       logger,
       auth: {
-        creds: savedCreds || {},
+        creds: freshCreds,
         keys: makeCacheableSignalKeyStore(keysStore, logger),
       },
       printQRInTerminal: false,
-      browser: ['Pulso CRM', 'Chrome', '120.0'],
+      browser: ['Chrome (Linux)', 'Chrome', '124.0.6367.82'],
       connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      retryRequestDelayMs: 2000,
     });
 
     conn.socket = socket;
@@ -120,16 +130,16 @@ async function connectWhatsApp(companyId) {
     });
 
     socket.ev.on('connection.update', async (update) => {
-      console.log('[WA] connection.update:', JSON.stringify({ connection: update.connection, hasQR: !!update.qr }));
       const { connection, lastDisconnect, qr } = update;
+      console.log('[WA] connection.update:', JSON.stringify({ connection, hasQR: !!qr, errMsg: lastDisconnect?.error?.message }));
 
       if (qr) {
         try {
           conn.qr = qr;
           conn.qrDataUrl = await QRCode.toDataURL(qr);
           conn.status = 'qr';
-          console.log('[WA] QR code generated');
-        } catch (e) { console.error('[WA] QR error:', e.message); }
+          console.log('[WA] QR code generated OK');
+        } catch (e) { console.error('[WA] QR generation error:', e.message); }
       }
 
       if (connection === 'open') {
@@ -137,17 +147,28 @@ async function connectWhatsApp(companyId) {
         conn.qr = null;
         conn.qrDataUrl = null;
         await setStatus(companyId, 'open');
-        console.log('[WA] Connected!');
+        console.log('[WA] Connected successfully!');
       }
 
       if (connection === 'close') {
-        const code = new Boom(lastDisconnect?.error)?.output?.statusCode;
-        console.log('[WA] Connection closed, code:', code);
+        const boom = new Boom(lastDisconnect?.error);
+        const code = boom?.output?.statusCode;
+        const reason = Object.entries(DisconnectReason).find(([, v]) => v === code)?.[0] || 'unknown';
+        console.log('[WA] Connection closed, code:', code, 'reason:', reason, 'err:', lastDisconnect?.error?.message);
         conn.status = 'disconnected';
         await setStatus(companyId, 'disconnected');
         connections.delete(companyId);
+
+        if (code === DisconnectReason.badSession || code === 500) {
+          console.log('[WA] Bad session — clearing auth state, user must reconnect manually');
+          await clearAuthState(companyId);
+          return;
+        }
+
         if (code !== DisconnectReason.loggedOut && code !== 401) {
-          setTimeout(() => connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message)), 5000);
+          const delay = 8000;
+          console.log('[WA] Will retry in', delay, 'ms');
+          setTimeout(() => connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message)), delay);
         }
       }
     });
@@ -170,7 +191,7 @@ async function connectWhatsApp(companyId) {
     });
 
   } catch (e) {
-    console.error('[WA] makeWASocket error:', e.message);
+    console.error('[WA] makeWASocket error:', e.message, e.stack);
     connections.delete(companyId);
   }
 }
