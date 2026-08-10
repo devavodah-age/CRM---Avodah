@@ -16,6 +16,7 @@ import {
   MessageCircle,
   LogOut,
   Loader2,
+  Smartphone,
 } from "lucide-react";
 
 // URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
@@ -100,6 +101,10 @@ export default function PulsoCRM() {
   const [showNewAutomationModal, setShowNewAutomationModal] = useState(false);
   const [newAutomationForm, setNewAutomationForm] = useState({ name: "", trigger_stage: "novo", action_text: "" });
 
+  const [waStatus, setWaStatus] = useState('disconnected'); // 'disconnected' | 'qr' | 'open'
+  const [waQr, setWaQr] = useState(null);
+  const [waPolling, setWaPolling] = useState(false);
+
   const idRef = useRef(1);
   const nextId = () => {
     idRef.current += 1;
@@ -157,6 +162,24 @@ export default function PulsoCRM() {
     if (token) loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    if (!token || !waPolling) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_URL}/whatsapp/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setWaStatus(data.status);
+        setWaQr(data.qrDataUrl);
+        if (data.status === 'open') setWaPolling(false);
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => clearInterval(id);
+  }, [token, waPolling]);
 
   async function handleAuthSubmit(e) {
     e.preventDefault();
@@ -238,6 +261,9 @@ export default function PulsoCRM() {
       setLeads((prev) =>
         prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l))
       );
+      if (waStatus === 'open' && selectedLead?.phone) {
+        sendWhatsAppMessage(selectedLead.id, selectedLead.phone, text).catch(() => {});
+      }
       // Simula uma resposta do lead só na tela, pra dar vida ao protótipo.
       // Isso NÃO é salvo no banco ainda — vira real quando plugarmos o WhatsApp de verdade.
       setTimeout(() => {
@@ -313,6 +339,44 @@ export default function PulsoCRM() {
     }
   }
 
+  async function connectWhatsApp() {
+    try {
+      await fetch(`${API_URL}/whatsapp/connect`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setWaPolling(true);
+    } catch (err) {
+      addToast('Erro ao iniciar conexão WhatsApp');
+    }
+  }
+
+  async function disconnectWhatsApp() {
+    try {
+      await fetch(`${API_URL}/whatsapp/disconnect`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setWaStatus('disconnected');
+      setWaQr(null);
+      setWaPolling(false);
+    } catch {}
+  }
+
+  async function sendWhatsAppMessage(leadId, phone, text) {
+    try {
+      const res = await fetch(`${API_URL}/whatsapp/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, phone, text }),
+      });
+      if (!res.ok) throw new Error('Falha ao enviar');
+      addToast('Mensagem enviada!');
+    } catch (err) {
+      addToast(`Erro: ${err.message}`);
+    }
+  }
+
   const filteredLeads = leads.filter((l) => {
     const q = searchTerm.toLowerCase();
     return l.name.toLowerCase().includes(q) || (l.company_name || "").toLowerCase().includes(q);
@@ -322,6 +386,7 @@ export default function PulsoCRM() {
     pipeline: ["Pipeline de Vendas", "Arraste os cards entre as etapas do funil"],
     contatos: ["Contatos", "Todos os leads e clientes em um só lugar"],
     automacoes: ["Automações", "Regras que disparam ações sozinhas"],
+    whatsapp: ["WhatsApp", "Conecte e gerencie sua conta WhatsApp"],
   };
 
   const sharedStyle = `
@@ -408,6 +473,7 @@ export default function PulsoCRM() {
           <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={19} />} title="Pipeline" />
           <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={19} />} title="Contatos" />
           <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={19} />} title="Automações" />
+          <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={19} />} title="WhatsApp" />
         </nav>
         <div className="mt-auto flex flex-col gap-4 items-center">
           <button title="Configurações" className="text-white/50 hover:text-white/90 transition-colors">
@@ -562,6 +628,53 @@ export default function PulsoCRM() {
                 );
               })}
               {automations.length === 0 && <p className="text-center text-gray-300 text-sm py-8">Nenhuma automação ainda.</p>}
+            </div>
+          )}
+
+          {view === 'whatsapp' && (
+            <div style={{ padding: '32px', maxWidth: 480, margin: '0 auto' }}>
+              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: INK }}>WhatsApp</h2>
+              <p style={{ color: '#6B7280', marginBottom: 24, fontSize: 14 }}>
+                Conecte seu WhatsApp para enviar e receber mensagens dos leads diretamente no CRM.
+              </p>
+
+              {waStatus === 'disconnected' && (
+                <button
+                  onClick={connectWhatsApp}
+                  style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <Smartphone size={18} /> Conectar WhatsApp
+                </button>
+              )}
+
+              {waStatus === 'qr' && waQr && (
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ marginBottom: 12, fontWeight: 600, color: INK }}>Escaneie o QR Code com seu WhatsApp</p>
+                  <img src={waQr} alt="QR Code WhatsApp" style={{ width: 260, height: 260, borderRadius: 12, border: '2px solid #e5e7eb' }} />
+                  <p style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF' }}>Atualizando automaticamente...</p>
+                </div>
+              )}
+
+              {waStatus === 'connecting' && (
+                <div style={{ color: '#6B7280', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Loader2 size={18} className="animate-spin" /> Conectando...
+                </div>
+              )}
+
+              {waStatus === 'open' && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '12px 16px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                    <span style={{ fontWeight: 600, color: '#166534' }}>WhatsApp conectado!</span>
+                  </div>
+                  <button
+                    onClick={disconnectWhatsApp}
+                    style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>
