@@ -5,7 +5,7 @@ const pool = require('../db');
 const router = express.Router();
 
 router.post('/connect', async (req, res) => {
-  const { companyId } = req.user;
+  const companyId = req.companyId;
   try {
     connectWhatsApp(companyId).catch(console.error);
     res.json({ ok: true });
@@ -15,12 +15,12 @@ router.post('/connect', async (req, res) => {
 });
 
 router.get('/status', async (req, res) => {
-  const { companyId } = req.user;
+  const companyId = req.companyId;
   res.json(getStatus(companyId));
 });
 
 router.post('/disconnect', async (req, res) => {
-  const { companyId } = req.user;
+  const companyId = req.companyId;
   try {
     await disconnectWhatsApp(companyId);
     res.json({ ok: true });
@@ -30,9 +30,9 @@ router.post('/disconnect', async (req, res) => {
 });
 
 router.post('/send', async (req, res) => {
-  const { companyId } = req.user;
+  const companyId = req.companyId;
   const { phone, text, leadId } = req.body;
-  if (!phone || !text) return res.status(400).json({ error: 'phone e text obrigatórios' });
+  if (!phone || !text) return res.status(400).json({ error: 'phone e text obrigatorios' });
   try {
     await sendMessage(companyId, phone, text);
     if (leadId) {
