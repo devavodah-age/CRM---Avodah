@@ -1,47 +1,57 @@
-// routes/automations.js
-const express = require("express");
-const db = require("../db");
+const express = require('express');
+const pool = require('../db');
 
 const router = express.Router();
 
-// GET /api/automations -> lista as automações da empresa logada
-router.get("/", (req, res) => {
-  const automations = db
-    .prepare("SELECT * FROM automations WHERE company_id = ? ORDER BY id ASC")
-    .all(req.companyId);
-  res.json(automations);
+router.get('/', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM automations WHERE company_id = $1 ORDER BY id ASC', [req.companyId]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno.' });
+  }
 });
 
-// POST /api/automations -> cria uma nova regra
-router.post("/", (req, res) => {
+router.post('/', async (req, res) => {
   const { name, trigger_stage, action_text } = req.body;
   if (!name || !trigger_stage || !action_text) {
-    return res.status(400).json({ error: "Preencha nome, etapa gatilho e ação." });
+    return res.status(400).json({ error: 'Preencha nome, etapa gatilho e ação.' });
   }
-  const insert = db.prepare(
-    "INSERT INTO automations (company_id, name, trigger_stage, action_text, enabled) VALUES (?, ?, ?, ?, 1)"
-  );
-  const result = insert.run(req.companyId, name, trigger_stage, action_text);
-  const automation = db.prepare("SELECT * FROM automations WHERE id = ?").get(result.lastInsertRowid);
-  res.status(201).json(automation);
+  try {
+    const result = await pool.query(
+      'INSERT INTO automations (company_id, name, trigger_stage, action_text, enabled) VALUES ($1, $2, $3, $4, TRUE) RETURNING *',
+      [req.companyId, name, trigger_stage, action_text]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno.' });
+  }
 });
 
-// PATCH /api/automations/:id -> liga/desliga uma automação
-router.patch("/:id", (req, res) => {
-  const automation = db
-    .prepare("SELECT * FROM automations WHERE id = ? AND company_id = ?")
-    .get(req.params.id, req.companyId);
-  if (!automation) return res.status(404).json({ error: "Automação não encontrada." });
+router.patch('/:id', async (req, res) => {
+  try {
+    const autoResult = await pool.query(
+      'SELECT * FROM automations WHERE id = $1 AND company_id = $2',
+      [req.params.id, req.companyId]
+    );
+    const automation = autoResult.rows[0];
+    if (!automation) return res.status(404).json({ error: 'Automação não encontrada.' });
 
-  const enabled = req.body.enabled !== undefined ? (req.body.enabled ? 1 : 0) : automation.enabled ? 0 : 1;
-  db.prepare("UPDATE automations SET enabled = ? WHERE id = ?").run(enabled, automation.id);
-  res.json({ ...automation, enabled });
+    const enabled = req.body.enabled !== undefined ? req.body.enabled : !automation.enabled;
+    await pool.query('UPDATE automations SET enabled = $1 WHERE id = $2', [enabled, automation.id]);
+    res.json({ ...automation, enabled });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno.' });
+  }
 });
 
-// DELETE /api/automations/:id
-router.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM automations WHERE id = ? AND company_id = ?").run(req.params.id, req.companyId);
-  res.status(204).send();
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM automations WHERE id = $1 AND company_id = $2', [req.params.id, req.companyId]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno.' });
+  }
 });
 
 module.exports = router;
