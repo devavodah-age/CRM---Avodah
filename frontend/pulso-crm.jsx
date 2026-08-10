@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutGrid,
   Users,
@@ -14,7 +14,14 @@ import {
   Snowflake,
   Trash2,
   MessageCircle,
+  LogOut,
+  Loader2,
 } from "lucide-react";
+
+// URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
+// Quando você hospedar o backend de verdade (Railway, Render, etc.), troque
+// esse valor pela URL pública dele.
+const API_URL = "http://localhost:3001/api";
 
 // ---------- Design tokens ----------
 const INK = "#14171F";
@@ -46,7 +53,7 @@ function stageColor(stage) {
 }
 
 function stageById(id) {
-  return STAGES.find((s) => s.id === id);
+  return STAGES.find((s) => s.id === id) || STAGES[0];
 }
 
 function formatBRL(v) {
@@ -57,19 +64,6 @@ function formatBRL(v) {
   });
 }
 
-function nowTime() {
-  return new Date().toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const AUTO_MESSAGES = {
-  novo: (first) => `Olá ${first}! Obrigado pelo contato, sou da equipe comercial 🙌`,
-  proposta: (first) => `Oi ${first}, tudo bem? Só confirmando se a proposta chegou certinho 📄`,
-  negociacao: (first) => `${first}, vamos fechar? Fico à disposição para qualquer dúvida!`,
-};
-
 const AUTO_REPLIES = [
   "Perfeito, obrigado pelo retorno!",
   "Combinado, vou verificar e te aviso.",
@@ -78,58 +72,22 @@ const AUTO_REPLIES = [
   "Entendi, muito obrigado!",
 ];
 
-const INITIAL_LEADS = [
-  { id: 1, name: "Marina Duarte", company: "Rede Verde Alimentos", value: 8500, phone: "(71) 98123-4501", stage: "novo",
-    messages: [{ id: 1, from: "lead", text: "Oi, vi o anúncio de vocês e queria saber mais.", time: "09:12" }] },
-  { id: 2, name: "Rafael Bittencourt", company: "Bittencourt Advogados", value: 12000, phone: "(71) 99234-5602", stage: "novo",
-    messages: [{ id: 1, from: "lead", text: "Bom dia, vocês atendem escritórios de advocacia?", time: "08:40" }] },
-  { id: 3, name: "Camila Nogueira", company: "Studio Nogueira Design", value: 4200, phone: "(71) 98345-6703", stage: "qualificacao",
-    messages: [
-      { id: 1, from: "lead", text: "Olá! Queria um orçamento pro plano anual.", time: "Ontem" },
-      { id: 2, from: "me", text: "Claro, Camila! Vou te enviar os detalhes.", time: "Ontem" },
-    ] },
-  { id: 4, name: "Eduardo Lima", company: "Lima Construções", value: 21000, phone: "(71) 99456-7804", stage: "qualificacao",
-    messages: [{ id: 1, from: "lead", text: "Preciso de algo pra gerenciar uns 40 leads por mês.", time: "Ontem" }] },
-  { id: 5, name: "Patrícia Alves", company: "Alves Contabilidade", value: 6300, phone: "(71) 98567-8905", stage: "proposta",
-    messages: [
-      { id: 1, from: "me", text: "Patrícia, segue a proposta em anexo 📎", time: "Seg" },
-      { id: 2, from: "lead", text: "Recebido, vou analisar com o sócio.", time: "Seg" },
-    ] },
-  { id: 6, name: "Thiago Rocha", company: "Rocha Logística", value: 15800, phone: "(71) 99678-9006", stage: "proposta",
-    messages: [{ id: 1, from: "me", text: "Thiago, a proposta ficou pronta, dá uma olhada.", time: "Seg" }] },
-  { id: 7, name: "Juliana Costa", company: "Costa & Filhos", value: 9700, phone: "(71) 98789-0107", stage: "negociacao",
-    messages: [
-      { id: 1, from: "lead", text: "Consegue fechar por esse valor?", time: "Ter" },
-      { id: 2, from: "me", text: "Consigo sim, fechamos hoje?", time: "Ter" },
-    ] },
-  { id: 8, name: "Bruno Martins", company: "Martins Tech", value: 18500, phone: "(71) 99890-1208", stage: "negociacao",
-    messages: [{ id: 1, from: "lead", text: "Só preciso alinhar com meu time ainda.", time: "Ter" }] },
-  { id: 9, name: "Fernanda Rezende", company: "Rezende Educação", value: 5400, phone: "(71) 98901-2309", stage: "novo",
-    messages: [{ id: 1, from: "lead", text: "Vocês têm plano pra escolas?", time: "10:05" }] },
-  { id: 10, name: "Diego Sales", company: "Sales Fitness", value: 7200, phone: "(71) 99012-3410", stage: "ganho",
-    messages: [
-      { id: 1, from: "lead", text: "Fechado, pode gerar o contrato.", time: "Qui" },
-      { id: 2, from: "me", text: "Show, Diego! Contrato enviado 🎉", time: "Qui" },
-    ] },
-  { id: 11, name: "Larissa Pinto", company: "Pinto Móveis", value: 3100, phone: "(71) 98123-4511", stage: "perdido",
-    messages: [{ id: 1, from: "lead", text: "Vamos ficar com o fornecedor atual, obrigada.", time: "Qua" }] },
-];
-
-const INITIAL_AUTOMATIONS = [
-  { id: 1, name: "Boas-vindas ao novo lead", trigger: "novo", action: "Enviar mensagem de boas-vindas no WhatsApp", enabled: true },
-  { id: 2, name: "Lembrete de proposta", trigger: "proposta", action: "Perguntar se o lead recebeu a proposta", enabled: true },
-  { id: 3, name: "Empurrão na negociação", trigger: "negociacao", action: "Enviar mensagem de fechamento no WhatsApp", enabled: true },
-];
-
 export default function PulsoCRM() {
-  const idRef = useRef(1000);
-  const nextId = () => {
-    idRef.current += 1;
-    return idRef.current;
-  };
+  // ----- autenticação -----
+  // O token fica só em memória (state). Ao recarregar a página, é preciso
+  // logar de novo — isso é proposital enquanto o app roda dentro do preview
+  // do Claude. Numa hospedagem de verdade, dá pra guardar em cookie seguro.
+  const [token, setToken] = useState(null);
+  const [company, setCompany] = useState(null);
+  const [authMode, setAuthMode] = useState("login"); // 'login' | 'signup'
+  const [authForm, setAuthForm] = useState({ companyName: "", userName: "", email: "", password: "" });
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
-  const [leads, setLeads] = useState(INITIAL_LEADS);
-  const [automations, setAutomations] = useState(INITIAL_AUTOMATIONS);
+  // ----- dados do CRM -----
+  const [leads, setLeads] = useState([]);
+  const [automations, setAutomations] = useState([]);
+  const [loadingData, setLoadingData] = useState(false);
   const [view, setView] = useState("pipeline");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState(null);
@@ -137,10 +95,16 @@ export default function PulsoCRM() {
   const [toasts, setToasts] = useState([]);
 
   const [showNewLeadModal, setShowNewLeadModal] = useState(false);
-  const [newLeadForm, setNewLeadForm] = useState({ name: "", company: "", value: "", phone: "" });
+  const [newLeadForm, setNewLeadForm] = useState({ name: "", company_name: "", value: "", phone: "" });
 
   const [showNewAutomationModal, setShowNewAutomationModal] = useState(false);
-  const [newAutomationForm, setNewAutomationForm] = useState({ name: "", trigger: "novo", actionText: "" });
+  const [newAutomationForm, setNewAutomationForm] = useState({ name: "", trigger_stage: "novo", action_text: "" });
+
+  const idRef = useRef(1);
+  const nextId = () => {
+    idRef.current += 1;
+    return idRef.current;
+  };
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId) || null;
 
@@ -152,25 +116,101 @@ export default function PulsoCRM() {
     }, 3500);
   }
 
-  function moveLead(leadId, stageId) {
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (e) {
+      data = {};
+    }
+    if (!res.ok) {
+      throw new Error(data.error || "Erro ao falar com o servidor");
+    }
+    return data;
+  }
+
+  async function loadData() {
+    setLoadingData(true);
+    try {
+      const [leadsData, automationsData] = await Promise.all([
+        apiFetch("/leads"),
+        apiFetch("/automations"),
+      ]);
+      setLeads(leadsData);
+      setAutomations(automationsData);
+    } catch (err) {
+      addToast(`Não consegui carregar os dados: ${err.message}`);
+    } finally {
+      setLoadingData(false);
+    }
+  }
+
+  useEffect(() => {
+    if (token) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const path = authMode === "login" ? "/auth/login" : "/auth/signup";
+      const body =
+        authMode === "login"
+          ? { email: authForm.email, password: authForm.password }
+          : authForm;
+      const res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Não foi possível entrar");
+      setToken(data.token);
+      setCompany(data.company);
+    } catch (err) {
+      setAuthError(
+        err.message === "Failed to fetch"
+          ? "Não consegui falar com o backend. Ele está rodando em " + API_URL + " ?"
+          : err.message
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function logout() {
+    setToken(null);
+    setCompany(null);
+    setLeads([]);
+    setAutomations([]);
+    setSelectedLeadId(null);
+  }
+
+  async function moveLead(leadId, stageId) {
+    const previous = leads;
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: stageId } : l)));
-    const matched = automations.find((a) => a.enabled && a.trigger === stageId);
-    if (matched) {
-      setTimeout(() => {
-        setLeads((prev) =>
-          prev.map((l) => {
-            if (l.id !== leadId) return l;
-            const sysMsg = { id: nextId(), from: "system", text: `🤖 Automação "${matched.name}" disparada`, time: nowTime() };
-            const template = AUTO_MESSAGES[stageId];
-            const first = l.name.split(" ")[0];
-            const msgs = template
-              ? [...l.messages, sysMsg, { id: nextId(), from: "me", text: template(first), time: nowTime() }]
-              : [...l.messages, sysMsg];
-            return { ...l, messages: msgs };
-          })
-        );
-        addToast(`Automação executada: ${matched.name}`);
-      }, 400);
+    try {
+      const data = await apiFetch(`/leads/${leadId}/stage`, {
+        method: "PATCH",
+        body: JSON.stringify({ stage: stageId }),
+      });
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? data.lead : l)));
+      if (data.automationTriggered) {
+        addToast(`Automação executada: ${data.automationTriggered}`);
+      }
+    } catch (err) {
+      setLeads(previous);
+      addToast(`Não consegui mover o lead: ${err.message}`);
     }
   }
 
@@ -185,63 +225,97 @@ export default function PulsoCRM() {
     moveLead(leadId, stageId);
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     if (!chatInput.trim() || !selectedLeadId) return;
     const text = chatInput.trim();
     const targetId = selectedLeadId;
     setChatInput("");
-    const myMsg = { id: nextId(), from: "me", text, time: nowTime() };
-    setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, myMsg] } : l)));
-    setTimeout(() => {
-      const reply = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
-      const replyMsg = { id: nextId(), from: "lead", text: reply, time: nowTime() };
-      setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, replyMsg] } : l)));
-    }, 1200);
+    try {
+      const message = await apiFetch(`/leads/${targetId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      setLeads((prev) =>
+        prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l))
+      );
+      // Simula uma resposta do lead só na tela, pra dar vida ao protótipo.
+      // Isso NÃO é salvo no banco ainda — vira real quando plugarmos o WhatsApp de verdade.
+      setTimeout(() => {
+        const reply = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
+        setLeads((prev) =>
+          prev.map((l) =>
+            l.id === targetId
+              ? { ...l, messages: [...l.messages, { id: `local-${nextId()}`, from_type: "lead", text: reply, created_at: "" }] }
+              : l
+          )
+        );
+      }, 1200);
+    } catch (err) {
+      addToast(`Não consegui enviar a mensagem: ${err.message}`);
+    }
   }
 
-  function addLead() {
+  async function addLead() {
     if (!newLeadForm.name.trim()) return;
-    const lead = {
-      id: nextId(),
-      name: newLeadForm.name,
-      company: newLeadForm.company || "Sem empresa",
-      value: Number(newLeadForm.value) || 0,
-      phone: newLeadForm.phone || "(00) 00000-0000",
-      stage: "novo",
-      messages: [{ id: nextId(), from: "system", text: "Lead criado manualmente", time: nowTime() }],
-    };
-    setLeads((prev) => [...prev, lead]);
-    setNewLeadForm({ name: "", company: "", value: "", phone: "" });
-    setShowNewLeadModal(false);
-    addToast(`Lead "${lead.name}" criado`);
+    try {
+      const lead = await apiFetch("/leads", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newLeadForm.name,
+          company_name: newLeadForm.company_name,
+          phone: newLeadForm.phone,
+          value: Number(newLeadForm.value) || 0,
+        }),
+      });
+      setLeads((prev) => [lead, ...prev]);
+      setNewLeadForm({ name: "", company_name: "", value: "", phone: "" });
+      setShowNewLeadModal(false);
+      addToast(`Lead "${lead.name}" criado`);
+    } catch (err) {
+      addToast(`Não consegui criar o lead: ${err.message}`);
+    }
   }
 
-  function addAutomation() {
-    if (!newAutomationForm.name.trim() || !newAutomationForm.actionText.trim()) return;
-    const auto = {
-      id: nextId(),
-      name: newAutomationForm.name,
-      trigger: newAutomationForm.trigger,
-      action: newAutomationForm.actionText,
-      enabled: true,
-    };
-    setAutomations((prev) => [...prev, auto]);
-    setNewAutomationForm({ name: "", trigger: "novo", actionText: "" });
-    setShowNewAutomationModal(false);
-    addToast(`Automação "${auto.name}" criada`);
+  async function addAutomation() {
+    if (!newAutomationForm.name.trim() || !newAutomationForm.action_text.trim()) return;
+    try {
+      const auto = await apiFetch("/automations", {
+        method: "POST",
+        body: JSON.stringify(newAutomationForm),
+      });
+      setAutomations((prev) => [...prev, auto]);
+      setNewAutomationForm({ name: "", trigger_stage: "novo", action_text: "" });
+      setShowNewAutomationModal(false);
+      addToast(`Automação "${auto.name}" criada`);
+    } catch (err) {
+      addToast(`Não consegui criar a automação: ${err.message}`);
+    }
   }
 
-  function toggleAutomation(id) {
-    setAutomations((prev) => prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
+  async function toggleAutomation(auto) {
+    try {
+      const updated = await apiFetch(`/automations/${auto.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !auto.enabled }),
+      });
+      setAutomations((prev) => prev.map((a) => (a.id === auto.id ? updated : a)));
+    } catch (err) {
+      addToast(`Não consegui atualizar a automação: ${err.message}`);
+    }
   }
 
-  function deleteAutomation(id) {
-    setAutomations((prev) => prev.filter((a) => a.id !== id));
+  async function deleteAutomation(id) {
+    try {
+      await apiFetch(`/automations/${id}`, { method: "DELETE" });
+      setAutomations((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      addToast(`Não consegui apagar a automação: ${err.message}`);
+    }
   }
 
   const filteredLeads = leads.filter((l) => {
     const q = searchTerm.toLowerCase();
-    return l.name.toLowerCase().includes(q) || l.company.toLowerCase().includes(q);
+    return l.name.toLowerCase().includes(q) || (l.company_name || "").toLowerCase().includes(q);
   });
 
   const titles = {
@@ -250,15 +324,79 @@ export default function PulsoCRM() {
     automacoes: ["Automações", "Regras que disparam ações sozinhas"],
   };
 
+  const sharedStyle = `
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+    .pulso-mono { font-family: 'IBM Plex Mono', monospace; }
+    .pulso-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .pulso-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+    @keyframes pulso-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulso-input { width: 100%; padding: 8px 12px; font-size: 14px; border-radius: 8px; border: 1px solid #E5E7EB; outline: none; }
+    .pulso-input:focus { border-color: ${PRIMARY}; }
+  `;
+
+  // ---------- Tela de login / cadastro ----------
+  if (!token) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-[#F5F6FA]" style={{ color: INK, fontFamily: "Inter, sans-serif", height: "100vh" }}>
+        <style>{sharedStyle}</style>
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8">
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm relative mb-3" style={{ fontFamily: "Sora, sans-serif", backgroundColor: PRIMARY }}>
+              P
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400" style={{ animation: "pulso-pulse 2s ease-in-out infinite" }} />
+            </div>
+            <h1 className="text-lg font-bold" style={{ fontFamily: "Sora, sans-serif" }}>Pulso CRM</h1>
+            <p className="text-xs text-gray-400 mt-1">{authMode === "login" ? "Entre na sua conta" : "Crie a conta da sua empresa"}</p>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-3">
+            {authMode === "signup" && (
+              <>
+                <Field label="Nome da empresa">
+                  <input required className="pulso-input" value={authForm.companyName} onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })} />
+                </Field>
+                <Field label="Seu nome">
+                  <input required className="pulso-input" value={authForm.userName} onChange={(e) => setAuthForm({ ...authForm, userName: e.target.value })} />
+                </Field>
+              </>
+            )}
+            <Field label="Email">
+              <input required type="email" className="pulso-input" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} />
+            </Field>
+            <Field label="Senha">
+              <input required type="password" className="pulso-input" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} />
+            </Field>
+
+            {authError && <p className="text-xs text-rose-500">{authError}</p>}
+
+            <button disabled={authLoading} type="submit" className="w-full py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: PRIMARY }}>
+              {authLoading && <Loader2 size={14} className="animate-spin" />}
+              {authMode === "login" ? "Entrar" : "Criar conta"}
+            </button>
+          </form>
+
+          <button
+            onClick={() => {
+              setAuthMode(authMode === "login" ? "signup" : "login");
+              setAuthError("");
+            }}
+            className="w-full text-center text-xs text-gray-400 mt-4 hover:text-gray-600"
+          >
+            {authMode === "login" ? "Não tem conta? Cadastre sua empresa" : "Já tem conta? Entrar"}
+          </button>
+
+          <p className="text-[11px] text-gray-300 text-center mt-4">
+            Backend esperado em <span className="pulso-mono">{API_URL}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- App principal ----------
   return (
     <div className="w-full h-full flex bg-[#F5F6FA]" style={{ color: INK, fontFamily: "Inter, sans-serif", height: "100vh" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
-        .pulso-mono { font-family: 'IBM Plex Mono', monospace; }
-        .pulso-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-        .pulso-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
-        @keyframes pulso-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-      `}</style>
+      <style>{sharedStyle}</style>
 
       {/* Sidebar */}
       <aside className="w-16 flex-shrink-0 flex flex-col items-center py-5 gap-6" style={{ backgroundColor: SIDEBAR }}>
@@ -275,13 +413,17 @@ export default function PulsoCRM() {
           <button title="Configurações" className="text-white/50 hover:text-white/90 transition-colors">
             <Settings size={19} />
           </button>
-          <div className="w-8 h-8 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center justify-center">VC</div>
+          <button title="Sair" onClick={logout} className="text-white/50 hover:text-white/90 transition-colors">
+            <LogOut size={17} />
+          </button>
+          <div title={company?.name} className="w-8 h-8 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center justify-center">
+            {(company?.name || "?").slice(0, 2).toUpperCase()}
+          </div>
         </div>
       </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="h-16 flex items-center justify-between px-6 border-b border-black/5 bg-white flex-shrink-0">
           <div>
             <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Sora, sans-serif" }}>{titles[view][0]}</h1>
@@ -300,27 +442,24 @@ export default function PulsoCRM() {
               </div>
             )}
             {view !== "automacoes" ? (
-              <button
-                onClick={() => setShowNewLeadModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold"
-                style={{ backgroundColor: PRIMARY }}
-              >
+              <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
                 <Plus size={15} /> Novo Lead
               </button>
             ) : (
-              <button
-                onClick={() => setShowNewAutomationModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold"
-                style={{ backgroundColor: PRIMARY }}
-              >
+              <button onClick={() => setShowNewAutomationModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
                 <Plus size={15} /> Nova Automação
               </button>
             )}
           </div>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden relative">
+          {loadingData && (
+            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+              <Loader2 size={22} className="animate-spin" style={{ color: PRIMARY }} />
+            </div>
+          )}
+
           {view === "pipeline" && (
             <div className="h-full overflow-x-auto pulso-scroll p-5 flex gap-4">
               {STAGES.map((stage) => {
@@ -328,12 +467,7 @@ export default function PulsoCRM() {
                 const total = stageLeads.reduce((s, l) => s + l.value, 0);
                 const color = stageColor(stage);
                 return (
-                  <div
-                    key={stage.id}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => handleDrop(e, stage.id)}
-                    className="w-72 flex-shrink-0 flex flex-col bg-white/70 rounded-xl border border-black/5"
-                  >
+                  <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)} className="w-72 flex-shrink-0 flex flex-col bg-white/70 rounded-xl border border-black/5">
                     <div className="px-3 py-3 border-b border-black/5 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
@@ -376,7 +510,7 @@ export default function PulsoCRM() {
                       return (
                         <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
                           <td className="px-4 py-3 font-medium">{lead.name}</td>
-                          <td className="px-4 py-3 text-gray-500">{lead.company}</td>
+                          <td className="px-4 py-3 text-gray-500">{lead.company_name}</td>
                           <td className="px-4 py-3 text-gray-500 pulso-mono">{lead.phone}</td>
                           <td className="px-4 py-3 pulso-mono">{formatBRL(lead.value)}</td>
                           <td className="px-4 py-3">
@@ -387,6 +521,11 @@ export default function PulsoCRM() {
                         </tr>
                       );
                     })}
+                    {filteredLeads.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center text-gray-300 text-sm py-8">Nenhum lead ainda. Crie o primeiro com "Novo Lead".</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -396,7 +535,7 @@ export default function PulsoCRM() {
           {view === "automacoes" && (
             <div className="h-full overflow-y-auto pulso-scroll p-5 space-y-3">
               {automations.map((auto) => {
-                const stage = stageById(auto.trigger);
+                const stage = stageById(auto.trigger_stage);
                 const color = stageColor(stage);
                 return (
                   <div key={auto.id} className="bg-white rounded-xl border border-black/5 p-4 flex items-center justify-between">
@@ -407,17 +546,13 @@ export default function PulsoCRM() {
                       <div>
                         <p className="font-semibold text-sm">{auto.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          Quando lead entra em <span className="font-medium" style={{ color }}>{stage.name}</span> → {auto.action}
+                          Quando lead entra em <span className="font-medium" style={{ color }}>{stage.name}</span> → {auto.action_text}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleAutomation(auto.id)}
-                        className={`w-10 h-6 rounded-full relative transition-colors ${auto.enabled ? "" : "bg-gray-200"}`}
-                        style={auto.enabled ? { backgroundColor: PRIMARY } : {}}
-                      >
-                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${auto.enabled ? "left-4.5" : "left-0.5"}`} style={{ left: auto.enabled ? "18px" : "2px" }} />
+                      <button onClick={() => toggleAutomation(auto)} className="w-10 h-6 rounded-full relative transition-colors" style={{ backgroundColor: auto.enabled ? PRIMARY : "#E5E7EB" }}>
+                        <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: auto.enabled ? "18px" : "2px" }} />
                       </button>
                       <button onClick={() => deleteAutomation(auto.id)} className="text-gray-300 hover:text-rose-500 transition-colors">
                         <Trash2 size={16} />
@@ -426,6 +561,7 @@ export default function PulsoCRM() {
                   </div>
                 );
               })}
+              {automations.length === 0 && <p className="text-center text-gray-300 text-sm py-8">Nenhuma automação ainda.</p>}
             </div>
           )}
         </main>
@@ -454,29 +590,25 @@ export default function PulsoCRM() {
             </div>
 
             <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2 text-xs text-gray-400">
-              <Building2 size={12} /> {selectedLead.company}
+              <Building2 size={12} /> {selectedLead.company_name}
               <span className="mx-1">·</span>
               <MessageCircle size={12} /> WhatsApp
             </div>
 
             <div className="flex-1 overflow-y-auto pulso-scroll p-4 space-y-3 bg-[#F5F6FA]">
               {selectedLead.messages.map((m) => {
-                if (m.from === "system") {
+                if (m.from_type === "system") {
                   return (
                     <div key={m.id} className="text-center text-[11px] text-gray-400 italic">
                       {m.text}
                     </div>
                   );
                 }
-                const mine = m.from === "me";
+                const mine = m.from_type === "me";
                 return (
                   <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${mine ? "text-white rounded-br-sm" : "bg-white text-gray-800 rounded-bl-sm border border-gray-100"}`}
-                      style={mine ? { backgroundColor: PRIMARY } : {}}
-                    >
+                    <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${mine ? "text-white rounded-br-sm" : "bg-white text-gray-800 rounded-bl-sm border border-gray-100"}`} style={mine ? { backgroundColor: PRIMARY } : {}}>
                       <p>{m.text}</p>
-                      <p className={`text-[10px] mt-1 ${mine ? "text-white/60" : "text-gray-400"}`}>{m.time}</p>
                     </div>
                   </div>
                 );
@@ -506,7 +638,7 @@ export default function PulsoCRM() {
             <input value={newLeadForm.name} onChange={(e) => setNewLeadForm({ ...newLeadForm, name: e.target.value })} className="pulso-input" placeholder="Nome do lead" />
           </Field>
           <Field label="Empresa">
-            <input value={newLeadForm.company} onChange={(e) => setNewLeadForm({ ...newLeadForm, company: e.target.value })} className="pulso-input" placeholder="Empresa" />
+            <input value={newLeadForm.company_name} onChange={(e) => setNewLeadForm({ ...newLeadForm, company_name: e.target.value })} className="pulso-input" placeholder="Empresa" />
           </Field>
           <Field label="Telefone">
             <input value={newLeadForm.phone} onChange={(e) => setNewLeadForm({ ...newLeadForm, phone: e.target.value })} className="pulso-input" placeholder="(00) 00000-0000" />
@@ -527,14 +659,14 @@ export default function PulsoCRM() {
             <input value={newAutomationForm.name} onChange={(e) => setNewAutomationForm({ ...newAutomationForm, name: e.target.value })} className="pulso-input" placeholder="Ex: Follow-up automático" />
           </Field>
           <Field label="Quando o lead entrar em">
-            <select value={newAutomationForm.trigger} onChange={(e) => setNewAutomationForm({ ...newAutomationForm, trigger: e.target.value })} className="pulso-input">
+            <select value={newAutomationForm.trigger_stage} onChange={(e) => setNewAutomationForm({ ...newAutomationForm, trigger_stage: e.target.value })} className="pulso-input">
               {STAGES.filter((s) => !s.color).map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </Field>
           <Field label="Ação">
-            <input value={newAutomationForm.actionText} onChange={(e) => setNewAutomationForm({ ...newAutomationForm, actionText: e.target.value })} className="pulso-input" placeholder="Ex: Enviar mensagem no WhatsApp" />
+            <input value={newAutomationForm.action_text} onChange={(e) => setNewAutomationForm({ ...newAutomationForm, action_text: e.target.value })} className="pulso-input" placeholder="Ex: Enviar mensagem no WhatsApp" />
           </Field>
           <button onClick={addAutomation} className="w-full mt-2 py-2.5 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
             Criar automação
@@ -551,23 +683,13 @@ export default function PulsoCRM() {
           </div>
         ))}
       </div>
-
-      <style>{`.pulso-input { width: 100%; padding: 8px 12px; font-size: 14px; border-radius: 8px; border: 1px solid #E5E7EB; outline: none; } .pulso-input:focus { border-color: ${PRIMARY}; }`}</style>
     </div>
   );
 }
 
 function SideBtn({ active, onClick, icon, title }) {
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-      style={{
-        backgroundColor: active ? "rgba(255,255,255,0.12)" : "transparent",
-        color: active ? "#FFFFFF" : "rgba(255,255,255,0.5)",
-      }}
-    >
+    <button title={title} onClick={onClick} className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ backgroundColor: active ? "rgba(255,255,255,0.12)" : "transparent", color: active ? "#FFFFFF" : "rgba(255,255,255,0.5)" }}>
       {icon}
     </button>
   );
@@ -576,25 +698,19 @@ function SideBtn({ active, onClick, icon, title }) {
 function LeadCard({ lead, color, stage, onDragStart, onClick }) {
   const lastMsg = lead.messages[lead.messages.length - 1];
   return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, lead.id)}
-      onClick={onClick}
-      className="bg-white rounded-lg shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
-      style={{ borderLeft: `4px solid ${color}` }}
-    >
+    <div draggable onDragStart={(e) => onDragStart(e, lead.id)} onClick={onClick} className="bg-white rounded-lg shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${color}` }}>
       <div className="flex items-start justify-between">
         <p className="font-semibold text-sm">{lead.name}</p>
         {stage.temp === 1 ? <Flame size={13} style={{ color }} /> : stage.temp === 0 ? <Snowflake size={13} style={{ color }} /> : null}
       </div>
-      <p className="text-xs text-gray-400 mt-0.5">{lead.company}</p>
+      <p className="text-xs text-gray-400 mt-0.5">{lead.company_name}</p>
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs font-semibold pulso-mono" style={{ color }}>{formatBRL(lead.value)}</span>
-        <span className="text-[10px] text-gray-300 pulso-mono">{lead.phone.slice(-9)}</span>
+        <span className="text-[10px] text-gray-300 pulso-mono">{(lead.phone || "").slice(-9)}</span>
       </div>
       {lastMsg && (
         <p className="text-[11px] text-gray-400 mt-2 italic truncate border-t border-gray-50 pt-2">
-          {lastMsg.from === "me" ? "Você: " : ""}{lastMsg.text}
+          {lastMsg.from_type === "me" ? "Você: " : ""}{lastMsg.text}
         </p>
       )}
     </div>
