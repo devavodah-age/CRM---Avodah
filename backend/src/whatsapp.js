@@ -1,3 +1,6 @@
+// Polyfill Web Crypto API for Node.js < 18
+if (!globalThis.crypto) { const { webcrypto } = require("crypto"); globalThis.crypto = webcrypto; }
+
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, initAuthCreds } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
