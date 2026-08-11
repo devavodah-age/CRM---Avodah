@@ -423,6 +423,18 @@ export default function PulsoCRM() {
     }
   }
 
+  async function deleteLead(leadId) {
+    if (!window.confirm('Excluir este lead? Todas as mensagens serão apagadas.')) return;
+    try {
+      await apiFetch(`/leads/${leadId}`, { method: 'DELETE' });
+      setLeads(prev => prev.filter(l => l.id !== leadId));
+      setSelectedLeadId(null);
+      addToast('Lead excluído');
+    } catch (err) {
+      addToast(`Erro: ${err.message}`);
+    }
+  }
+
   function openNewAutomation() {
     setEditingAuto(null);
     setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [] });
@@ -770,9 +782,14 @@ export default function PulsoCRM() {
                     )}
                   </div>
                 </div>
-                <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600">
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => deleteLead(selectedLead.id)} className="text-gray-300 hover:text-red-500 p-1" title="Excluir lead">
+                    <Trash2 size={15} />
+                  </button>
+                  <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600 p-1">
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
               {/* Inline value editor */}
               <div className="mt-3 flex items-center gap-2">
