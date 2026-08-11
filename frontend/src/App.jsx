@@ -171,7 +171,8 @@ export default function PulsoCRM() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        setWaStatus(data.status);
+        // While polling, treat momentary 'disconnected' (backend retry gap) as 'connecting'
+        setWaStatus(data.status === 'disconnected' ? 'connecting' : data.status);
         setWaQr(data.qrDataUrl);
         if (data.status === 'open') setWaPolling(false);
       } catch {}
