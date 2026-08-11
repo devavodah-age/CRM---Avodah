@@ -17,6 +17,7 @@ import {
   LogOut,
   Loader2,
   Smartphone,
+  Pencil,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 
@@ -411,6 +412,12 @@ export default function PulsoCRM() {
     setFlowEditorOpen(true);
   }
 
+  function openEditAutomation(auto) {
+    setEditingAuto(auto);
+    setAutoForm({ name: auto.name, trigger_type: auto.trigger_type, trigger_config: auto.trigger_config || {}, actions: auto.actions || [] });
+    setFlowEditorOpen(true);
+  }
+
   const filteredLeads = leads.filter((l) => {
     const q = searchTerm.toLowerCase();
     return l.name.toLowerCase().includes(q) || (l.company_name || "").toLowerCase().includes(q);
@@ -649,7 +656,7 @@ export default function PulsoCRM() {
                 </div>
               ) : (
                 <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-                  {automations.map((auto) => <AutomationCard key={auto.id} auto={auto} onToggle={() => toggleAutomation(auto)} onDelete={() => deleteAutomation(auto.id)} />)}
+                  {automations.map((auto) => <AutomationCard key={auto.id} auto={auto} onToggle={() => toggleAutomation(auto)} onDelete={() => deleteAutomation(auto.id)} onEdit={() => openEditAutomation(auto)} />)}
                 </div>
               )}
             </div>
@@ -806,10 +813,17 @@ export default function PulsoCRM() {
               flow_edges: edges,
             };
             try {
-              const auto = await apiFetch('/automations', { method: 'POST', body: JSON.stringify(autoData) });
-              setAutomations(prev => [...prev, auto]);
-              setFlowEditorOpen(false);
-              addToast(`Automação "${auto.name}" criada`);
+              if (editingAuto) {
+                const updated = await apiFetch(`/automations/${editingAuto.id}`, { method: 'PUT', body: JSON.stringify(autoData) });
+                setAutomations(prev => prev.map(a => a.id === editingAuto.id ? updated : a));
+                setFlowEditorOpen(false);
+                addToast(`Automação "${updated.name}" atualizada`);
+              } else {
+                const auto = await apiFetch('/automations', { method: 'POST', body: JSON.stringify(autoData) });
+                setAutomations(prev => [...prev, auto]);
+                setFlowEditorOpen(false);
+                addToast(`Automação "${auto.name}" criada`);
+              }
             } catch (err) {
               addToast(`Erro: ${err.message}`);
             }
@@ -903,7 +917,7 @@ const ACTION_TYPES = [
 const STAGES_PIPELINE = ['novo', 'qualificacao', 'proposta', 'negociacao', 'ganho', 'perdido'];
 const STAGE_LABELS = { novo: 'Novo Lead', qualificacao: 'Qualificação', proposta: 'Proposta Enviada', negociacao: 'Negociação', ganho: 'Ganho', perdido: 'Perdido' };
 
-function AutomationCard({ auto, onToggle, onDelete }) {
+function AutomationCard({ auto, onToggle, onDelete, onEdit }) {
   const trigger = TRIGGER_TYPES.find(t => t.id === auto.trigger_type) || TRIGGER_TYPES[0];
   const actions = Array.isArray(auto.actions) ? auto.actions : [];
 
@@ -922,7 +936,10 @@ function AutomationCard({ auto, onToggle, onDelete }) {
           <button onClick={onToggle} className="w-9 h-5 rounded-full relative transition-colors flex-shrink-0" style={{ backgroundColor: auto.enabled ? '#4F3CC9' : '#E5E7EB' }}>
             <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: auto.enabled ? '17px' : '2px' }} />
           </button>
-          <button onClick={onDelete} className="text-gray-200 hover:text-rose-400 transition-colors">
+          <button onClick={onEdit} className="text-gray-200 hover:text-blue-400 transition-colors" title="Editar">
+            <Pencil size={14} />
+          </button>
+          <button onClick={onDelete} className="text-gray-200 hover:text-rose-400 transition-colors" title="Excluir">
             <Trash2 size={14} />
           </button>
         </div>
@@ -970,4 +987,5 @@ function AutomationCard({ auto, onToggle, onDelete }) {
     </div>
   );
 }
+
 
