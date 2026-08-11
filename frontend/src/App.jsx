@@ -18,6 +18,9 @@ import {
   Loader2,
   Smartphone,
   Pencil,
+  DollarSign,
+  Edit2,
+  Check,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 
@@ -124,6 +127,7 @@ export default function PulsoCRM() {
   const [waStatus, setWaStatus] = useState('disconnected'); // 'disconnected' | 'qr' | 'open'
   const [waQr, setWaQr] = useState(null);
   const [waPolling, setWaPolling] = useState(false);
+  const [editingLeadField, setEditingLeadField] = useState(null); // { field, value }
 
   const idRef = useRef(1);
   const nextId = () => {
@@ -401,6 +405,19 @@ export default function PulsoCRM() {
       });
       if (!res.ok) throw new Error('Falha ao enviar');
       addToast('Mensagem enviada!');
+    } catch (err) {
+      addToast(`Erro: ${err.message}`);
+    }
+  }
+
+  async function updateLead(leadId, fields) {
+    try {
+      const updated = await apiFetch(`/leads/${leadId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fields),
+      });
+      setLeads(prev => prev.map(l => l.id === leadId ? updated : l));
+      addToast('Lead atualizado');
     } catch (err) {
       addToast(`Erro: ${err.message}`);
     }
@@ -716,21 +733,62 @@ export default function PulsoCRM() {
         <div className="fixed inset-0 z-40 flex justify-end">
           <div className="absolute inset-0 bg-black/20" onClick={() => setSelectedLeadId(null)} />
           <div className="relative w-96 h-full bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-black/5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: PRIMARY }}>
-                  {selectedLead.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+            <div className="px-4 py-4 border-b border-black/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: PRIMARY }}>
+                    {selectedLead.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">{selectedLead.name}</p>
+                    <p className="text-xs text-gray-400 flex items-center gap-1">
+                      <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-sm">{selectedLead.name}</p>
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
-                    <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
-                  </p>
-                </div>
+                <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600">
+                  <X size={18} />
+                </button>
               </div>
-              <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600">
-                <X size={18} />
-              </button>
+              {/* Inline value editor */}
+              <div className="mt-3 flex items-center gap-2">
+                <DollarSign size={13} className="text-gray-400" />
+                {editingLeadField?.field === 'value' ? (
+                  <div className="flex items-center gap-1 flex-1">
+                    <input
+                      type="number"
+                      autoFocus
+                      className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9]"
+                      defaultValue={selectedLead.value || 0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          updateLead(selectedLead.id, { value: Number(e.target.value) });
+                          setEditingLeadField(null);
+                        }
+                        if (e.key === 'Escape') setEditingLeadField(null);
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        const input = e.currentTarget.previousSibling;
+                        updateLead(selectedLead.id, { value: Number(input.value) });
+                        setEditingLeadField(null);
+                      }}
+                      className="text-green-500 hover:text-green-700"
+                    >
+                      <Check size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingLeadField({ field: 'value', value: selectedLead.value })}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 group"
+                  >
+                    <span className="font-semibold pulso-mono" style={{ color: PRIMARY }}>{formatBRL(selectedLead.value)}</span>
+                    <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2 text-xs text-gray-400">
