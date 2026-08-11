@@ -212,7 +212,7 @@ async function connectWhatsApp(companyId) {
               : String(contact.lid);
             // Update leads that have the @lid ID as phone
             await pool.query(
-              'UPDATE leads SET phone= WHERE company_id= AND (phone= OR phone=)',
+              'UPDATE leads SET phone=$1 WHERE company_id=$2 AND (phone=$3 OR phone=$4)',
               [realPhone, companyId, lidId, contact.lid]
             );
           }
@@ -232,7 +232,7 @@ async function connectWhatsApp(companyId) {
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
             const leadResult = await pool.query(
-              'SELECT id FROM leads WHERE company_id= AND phone ILIKE  LIMIT 1',
+              'SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
               [companyId, `%${phone}%`]
             );
             if (leadResult.rows.length) {
@@ -240,7 +240,7 @@ async function connectWhatsApp(companyId) {
               if (msgId && processedMsgIds.has(msgId)) continue;
               if (msgId) processedMsgIds.add(msgId);
               await pool.query(
-                "INSERT INTO messages (lead_id, from_type, text) VALUES (,'me',)",
+                "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'me',$2)",
                 [leadResult.rows[0].id, text]
               );
             }
