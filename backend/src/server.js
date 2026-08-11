@@ -6,13 +6,15 @@ const authRoutes = require("./routes/auth");
 const leadsRoutes = require("./routes/leads");
 const automationsRoutes = require("./routes/automations");
 const whatsappRoutes = require("./routes/whatsapp");
+const { connectWhatsApp } = require("./whatsapp");
+const pool = require("./db");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Pulso CRM backend rodando 🚀" });
+  res.json({ status: "ok", message: "Pulso CRM backend rodando" });
 });
 
 app.use("/api/auth", authRoutes);
@@ -21,6 +23,27 @@ app.use("/api/automations", requireAuth, automationsRoutes);
 app.use("/api/whatsapp", requireAuth, whatsappRoutes);
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Pulso CRM backend rodando em http://localhost:${PORT}`);
+
+  // Auto-reconnect WhatsApp sessions that were active before last deploy
+  setTimeout(async () => {
+    try {
+      const { rows } = await pool.query(
+        "SELECT company_id FROM whatsapp_sessions WHERE creds IS NOT NULL AND status = 'open'"
+      );
+      if (rows.length === 0) {
+        console.log("[WA] No active sessions to reconnect");
+        return;
+      }
+      for (const { company_id } of rows) {
+        console.log("[WA] Auto-reconnecting company:", company_id);
+        connectWhatsApp(company_id).catch((e) =>
+          console.error("[WA] Auto-reconnect failed for", company_id, e.message)
+        );
+      }
+    } catch (e) {
+      console.error("[WA] Auto-reconnect startup error:", e.message);
+    }
+  }, 3000);
 });
