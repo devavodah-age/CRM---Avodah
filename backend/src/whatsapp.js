@@ -208,7 +208,7 @@ async function connectWhatsApp(companyId) {
           try {
             const remoteJid = msg.key.remoteJid || '';
             if (remoteJid.endsWith('@g.us')) continue;
-            const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
+            const phone = remoteJid.replace(/@[^@]+$/, ''); // strip any @suffix for DB matching
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
             const leadResult = await pool.query(
