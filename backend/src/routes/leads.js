@@ -80,6 +80,19 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+router.delete('/:id', async (req, res) => {
+  try {
+    const leadResult = await pool.query('SELECT id FROM leads WHERE id=$1 AND company_id=$2', [req.params.id, req.companyId]);
+    if (!leadResult.rows[0]) return res.status(404).json({ error: 'Lead não encontrado.' });
+    await pool.query('DELETE FROM messages WHERE lead_id=$1', [req.params.id]);
+    await pool.query('DELETE FROM leads WHERE id=$1', [req.params.id]);
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
 router.post('/:id/messages', async (req, res) => {
   const { text } = req.body;
   try {
