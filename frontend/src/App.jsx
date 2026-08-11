@@ -741,9 +741,19 @@ export default function PulsoCRM() {
                   </div>
                   <div>
                     <p className="font-semibold text-sm">{selectedLead.name}</p>
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
-                    </p>
+                    {editingLeadField?.field === 'phone' ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-[#4F3CC9] w-36"
+                          defaultValue={(selectedLead.phone || "").replace(/@.*$/, "")}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(selectedLead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
+                        <button onClick={(e) => { updateLead(selectedLead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} className="text-green-500"><Check size={12} /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setEditingLeadField({ field: 'phone' })} className="text-xs text-gray-400 flex items-center gap-1 hover:text-gray-700 group">
+                        <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
+                        <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600">
