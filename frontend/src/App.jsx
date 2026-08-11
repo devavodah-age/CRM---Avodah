@@ -635,7 +635,21 @@ export default function PulsoCRM() {
                         <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
                           <td className="px-4 py-3 font-medium">{lead.name}</td>
                           <td className="px-4 py-3 text-gray-500">{lead.company_name}</td>
-                          <td className="px-4 py-3 text-gray-500 pulso-mono">{(lead.phone || "").replace(/@.*$/, "")}</td>
+                          <td className="px-4 py-3 text-gray-500 pulso-mono" onClick={e => e.stopPropagation()}>
+                            {editingLeadField?.field === 'phone' && editingLeadField?.id === lead.id ? (
+                              <div className="flex items-center gap-1">
+                                <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9] w-36"
+                                  defaultValue={(lead.phone || "").replace(/@.*$/, "")}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(lead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
+                                <button onClick={(e) => { updateLead(lead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} className="text-green-500"><Check size={12} /></button>
+                              </div>
+                            ) : (
+                              <span onClick={() => setEditingLeadField({ field: 'phone', id: lead.id })} className="cursor-pointer hover:text-gray-800 group flex items-center gap-1">
+                                {(lead.phone || "").replace(/@.*$/, "") || <span className="text-gray-300 italic">clique para editar</span>}
+                                <Edit2 size={10} className="opacity-0 group-hover:opacity-100 text-gray-400" />
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 pulso-mono">{formatBRL(lead.value)}</td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: color + "22", color }}>
