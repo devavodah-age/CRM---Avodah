@@ -6,12 +6,16 @@ const authRoutes = require("./routes/auth");
 const leadsRoutes = require("./routes/leads");
 const automationsRoutes = require("./routes/automations");
 const whatsappRoutes = require("./routes/whatsapp");
-const { connectWhatsApp } = require("./whatsapp");
+const { connectWhatsApp, sendMessage } = require("./whatsapp");
+const { setWhatsAppSender } = require("./automationEngine");
 const pool = require("./db");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Wire up WhatsApp sender so automations can send real messages
+setWhatsAppSender(sendMessage);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Pulso CRM backend rodando" });
