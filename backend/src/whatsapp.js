@@ -203,7 +203,32 @@ async function connectWhatsApp(companyId) {
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const msg of messages) {
-        if (msg.key.fromMe) continue;
+        // Capture messages sent from phone to existing leads
+        if (msg.key.fromMe) {
+          try {
+            const remoteJid = msg.key.remoteJid || '';
+            if (remoteJid.endsWith('@g.us')) continue;
+            const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
+            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+            if (!text) continue;
+            const leadResult = await pool.query(
+              'SELECT id FROM leads WHERE company_id= AND phone ILIKE  LIMIT 1',
+              [companyId, `%${phone}%`]
+            );
+            if (leadResult.rows.length) {
+              const msgId = msg.key.id;
+              if (msgId && processedMsgIds.has(msgId)) continue;
+              if (msgId) processedMsgIds.add(msgId);
+              const msgTs = (msg.messageTimestamp || 0) * 1000;
+              if (Date.now() - msgTs > 60000) continue;
+              await pool.query(
+                "INSERT INTO messages (lead_id, from_type, text) VALUES (,'me',)",
+                [leadResult.rows[0].id, text]
+              );
+            }
+          } catch (e) { console.error('[WA] fromMe handler error:', e.message); }
+          continue;
+        }
         // Skip already processed messages (dedup on reconnect)
         const msgId = msg.key.id;
         if (msgId && processedMsgIds.has(msgId)) continue;
