@@ -58,6 +58,28 @@ router.patch('/:id/stage', async (req, res) => {
   }
 });
 
+router.patch('/:id', async (req, res) => {
+  try {
+    const leadResult = await pool.query('SELECT * FROM leads WHERE id=$1 AND company_id=$2', [req.params.id, req.companyId]);
+    const lead = leadResult.rows[0];
+    if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
+    const { name, company_name, phone, value } = req.body;
+    const updated = await pool.query(
+      `UPDATE leads SET
+        name = COALESCE($1, name),
+        company_name = COALESCE($2, company_name),
+        phone = COALESCE($3, phone),
+        value = COALESCE($4, value)
+       WHERE id=$5 RETURNING *`,
+      [name || null, company_name !== undefined ? company_name : null, phone || null, value !== undefined ? value : null, lead.id]
+    );
+    res.json(await attachMessages(updated.rows[0]));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
 router.post('/:id/messages', async (req, res) => {
   const { text } = req.body;
   try {
