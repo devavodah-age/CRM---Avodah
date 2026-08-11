@@ -6,6 +6,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const QRCode = require('qrcode');
 const pool = require('./db');
+const { triggerAutomations } = require('./automationEngine');
 
 process.on('uncaughtException', (err) => {
   console.error('[WA] uncaughtException:', err.message, err.stack);
@@ -234,6 +235,8 @@ async function connectWhatsApp(companyId) {
             "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'lead',$2)",
             [leadId, text]
           );
+          // Trigger message_received automations
+          triggerAutomations(companyId, 'message_received', { lead: { id: leadId, phone }, message: text }).catch(console.error);
         } catch (e) { console.error('[WA] message handler error:', e.message); }
       }
     });
