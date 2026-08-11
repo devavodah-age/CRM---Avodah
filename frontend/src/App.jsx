@@ -18,6 +18,7 @@ import {
   Loader2,
   Smartphone,
 } from "lucide-react";
+import FlowCanvas from "./FlowCanvas";
 
 // URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
 // Quando você hospedar o backend de verdade (Railway, Render, etc.), troque
@@ -98,7 +99,9 @@ export default function PulsoCRM() {
   const [showNewLeadModal, setShowNewLeadModal] = useState(false);
   const [newLeadForm, setNewLeadForm] = useState({ name: "", company_name: "", value: "", phone: "" });
 
-  const [showNewAutomationModal, setShowNewAutomationModal] = useState(false);
+  // Flow canvas state
+  const [flowEditorOpen, setFlowEditorOpen] = useState(false);
+  const [editingAuto, setEditingAuto] = useState(null);
   const [autoForm, setAutoForm] = useState({
     name: '',
     trigger_type: 'new_lead',
@@ -308,23 +311,6 @@ export default function PulsoCRM() {
     }
   }
 
-  async function addAutomation() {
-    if (!autoForm.name.trim()) { addToast('Dê um nome à automação'); return; }
-    if (!autoForm.actions.length) { addToast('Adicione pelo menos uma ação'); return; }
-    try {
-      const auto = await apiFetch("/automations", {
-        method: "POST",
-        body: JSON.stringify(autoForm),
-      });
-      setAutomations((prev) => [...prev, auto]);
-      setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [{ type: 'send_whatsapp', message: 'Olá {nome}!' }] });
-      setShowNewAutomationModal(false);
-      addToast(`Automação "${auto.name}" criada`);
-    } catch (err) {
-      addToast(`Não consegui criar: ${err.message}`);
-    }
-  }
-
   async function toggleAutomation(auto) {
     try {
       const updated = await apiFetch(`/automations/${auto.id}`, {
@@ -382,6 +368,12 @@ export default function PulsoCRM() {
     } catch (err) {
       addToast(`Erro: ${err.message}`);
     }
+  }
+
+  function openNewAutomation() {
+    setEditingAuto(null);
+    setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [] });
+    setFlowEditorOpen(true);
   }
 
   const filteredLeads = leads.filter((l) => {
@@ -519,7 +511,7 @@ export default function PulsoCRM() {
                 <Plus size={15} /> Novo Lead
               </button>
             ) : (
-              <button onClick={() => setShowNewAutomationModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
+              <button onClick={openNewAutomation} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
                 <Plus size={15} /> Nova Automação
               </button>
             )}
@@ -616,7 +608,7 @@ export default function PulsoCRM() {
                     <p className="font-bold text-base" style={{ color: INK }}>Nenhuma automação ainda</p>
                     <p className="text-sm text-gray-400 mt-1">Crie sua primeira automação para trabalhar no piloto automático</p>
                   </div>
-                  <button onClick={() => setShowNewAutomationModal(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md" style={{ backgroundColor: PRIMARY }}>
+                  <button onClick={openNewAutomation} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md" style={{ backgroundColor: PRIMARY }}>
                     <Plus size={15} /> Criar primeira automação
                   </button>
                 </div>
@@ -762,13 +754,32 @@ export default function PulsoCRM() {
         </Modal>
       )}
 
-      {/* New Automation modal */}
-      {showNewAutomationModal && (
-        <AutomationModal
-          form={autoForm}
-          setForm={setAutoForm}
-          onSave={addAutomation}
-          onClose={() => setShowNewAutomationModal(false)}
+      {/* Flow Canvas (fullscreen overlay for creating/editing automations) */}
+      {flowEditorOpen && (
+        <FlowCanvas
+          name={autoForm.name}
+          onNameChange={name => setAutoForm(f => ({ ...f, name }))}
+          initialNodes={editingAuto?.flow_nodes || []}
+          initialEdges={editingAuto?.flow_edges || []}
+          onSave={async ({ trigger_type, trigger_config, actions, nodes, edges }) => {
+            const autoData = {
+              name: autoForm.name || 'Nova automação',
+              trigger_type,
+              trigger_config,
+              actions,
+              flow_nodes: nodes,
+              flow_edges: edges,
+            };
+            try {
+              const auto = await apiFetch('/automations', { method: 'POST', body: JSON.stringify(autoData) });
+              setAutomations(prev => [...prev, auto]);
+              setFlowEditorOpen(false);
+              addToast(`Automação "${auto.name}" criada`);
+            } catch (err) {
+              addToast(`Erro: ${err.message}`);
+            }
+          }}
+          onClose={() => setFlowEditorOpen(false)}
         />
       )}
 
@@ -920,153 +931,6 @@ function AutomationCard({ auto, onToggle, onDelete }) {
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function AutomationModal({ form, setForm, onSave, onClose }) {
-  const PRIMARY = '#4F3CC9';
-
-  function updateAction(i, patch) {
-    const updated = form.actions.map((a, idx) => idx === i ? { ...a, ...patch } : a);
-    setForm(f => ({ ...f, actions: updated }));
-  }
-
-  function addAction() {
-    setForm(f => ({ ...f, actions: [...f.actions, { type: 'send_whatsapp', message: '' }] }));
-  }
-
-  function removeAction(i) {
-    setForm(f => ({ ...f, actions: f.actions.filter((_, idx) => idx !== i) }));
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="font-bold text-base" style={{ fontFamily: 'Sora, sans-serif', color: '#14171F' }}>Nova Automação</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Configure o gatilho e as ações</p>
-          </div>
-          <button onClick={onClose} className="text-gray-300 hover:text-gray-600"><X size={18} /></button>
-        </div>
-
-        <div className="overflow-y-auto pulso-scroll flex-1 px-6 py-4 space-y-5">
-          {/* Nome */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Nome da automação</label>
-            <input
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="pulso-input"
-              placeholder="Ex: Boas-vindas para novo lead"
-            />
-          </div>
-
-          {/* Trigger */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Quando isso acontecer</label>
-            <div className="grid grid-cols-3 gap-2">
-              {TRIGGER_TYPES.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setForm(f => ({ ...f, trigger_type: t.id, trigger_config: {} }))}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all text-xs font-semibold"
-                  style={{
-                    borderColor: form.trigger_type === t.id ? t.color : '#E5E7EB',
-                    background: form.trigger_type === t.id ? t.bg : 'white',
-                    color: form.trigger_type === t.id ? t.color : '#6B7280',
-                  }}
-                >
-                  <span className="text-xl">{t.icon}</span>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {form.trigger_type === 'stage_changed' && (
-              <div className="mt-3">
-                <label className="text-xs text-gray-500 mb-1 block">Qual etapa?</label>
-                <select
-                  value={form.trigger_config?.stage || ''}
-                  onChange={e => setForm(f => ({ ...f, trigger_config: { stage: e.target.value } }))}
-                  className="pulso-input"
-                >
-                  <option value="">Qualquer etapa</option>
-                  {STAGES_PIPELINE.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Execute estas ações</label>
-            <div className="space-y-2">
-              {form.actions.map((action, i) => {
-                const at = ACTION_TYPES.find(a => a.id === action.type) || ACTION_TYPES[0];
-                return (
-                  <div key={i} className="border border-gray-100 rounded-xl p-3 bg-gray-50 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{at.icon}</span>
-                      <select
-                        value={action.type}
-                        onChange={e => updateAction(i, { type: e.target.value, message: '', minutes: 5, stage: '', note: '' })}
-                        className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none font-semibold"
-                        style={{ color: at.color }}
-                      >
-                        {ACTION_TYPES.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
-                      </select>
-                      {form.actions.length > 1 && (
-                        <button onClick={() => removeAction(i)} className="text-gray-300 hover:text-rose-400"><X size={14} /></button>
-                      )}
-                    </div>
-                    {action.type === 'send_whatsapp' && (
-                      <textarea
-                        value={action.message || ''}
-                        onChange={e => updateAction(i, { message: e.target.value })}
-                        placeholder="Olá {nome}! Como posso ajudar? Use {nome}, {empresa}"
-                        rows={2}
-                        className="w-full text-xs px-3 py-2 rounded-lg border border-gray-200 outline-none resize-none focus:border-[#4F3CC9]"
-                      />
-                    )}
-                    {action.type === 'wait' && (
-                      <div className="flex items-center gap-2">
-                        <input type="number" min={1} value={action.minutes || 5} onChange={e => updateAction(i, { minutes: Number(e.target.value) })} className="w-20 text-xs px-2 py-1.5 rounded-lg border border-gray-200 outline-none" />
-                        <span className="text-xs text-gray-400">minutos antes da próxima ação</span>
-                      </div>
-                    )}
-                    {action.type === 'move_stage' && (
-                      <select value={action.stage || ''} onChange={e => updateAction(i, { stage: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none">
-                        <option value="">Selecione a etapa</option>
-                        {STAGES_PIPELINE.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
-                      </select>
-                    )}
-                    {action.type === 'add_note' && (
-                      <input value={action.note || ''} onChange={e => updateAction(i, { note: e.target.value })} placeholder="Texto da nota interna" className="w-full text-xs px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <button onClick={addAction} className="mt-2 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-dashed border-gray-300 hover:border-[#4F3CC9] hover:text-[#4F3CC9] transition-colors text-gray-400 w-full justify-center">
-              <Plus size={13} /> Adicionar ação
-            </button>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">
-            Cancelar
-          </button>
-          <button onClick={onSave} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90" style={{ backgroundColor: PRIMARY }}>
-            Criar automação
-          </button>
-        </div>
       </div>
     </div>
   );
