@@ -13,12 +13,12 @@ import 'reactflow/dist/style.css';
 import { X, Plus, Zap, MessageCircle, Clock, ArrowRight, StickyNote } from 'lucide-react';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
-const BG_MAIN    = '#0D1117';
-const BG_CARD    = '#21262D';
-const BG_SIDEBAR = '#161B22';
-const BORDER     = '#30363D';
-const TEXT_PRI   = '#E6EDF3';
-const TEXT_SEC   = '#8B949E';
+const BG_MAIN    = '#F5F6FA';
+const BG_CARD    = '#FFFFFF';
+const BG_SIDEBAR = '#FFFFFF';
+const BORDER     = '#E5E7EB';
+const TEXT_PRI   = '#14171F';
+const TEXT_SEC   = '#6B7280';
 
 const TYPE_META = {
   trigger_new_lead:          { color: '#238636', label: 'Novo Lead',           icon: <Zap size={13} /> },
@@ -42,8 +42,8 @@ const STAGES_LIST = [
 const DEFAULT_EDGE = {
   type: 'smoothstep',
   animated: true,
-  style: { stroke: '#58A6FF', strokeWidth: 1.5 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#58A6FF' },
+  style: { stroke: '#4F3CC9', strokeWidth: 1.5 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#4F3CC9' },
 };
 
 // ─── Shared node shell ───────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ function NodeShell({ id, accentColor, title, icon, children, data }) {
       fontFamily: 'Inter, sans-serif',
       fontSize: 13,
       color: TEXT_PRI,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       position: 'relative',
     }}>
       {/* Colored top strip */}
@@ -88,7 +88,7 @@ function NodeShell({ id, accentColor, title, icon, children, data }) {
       <Handle
         type="target"
         position={Position.Top}
-        style={{ width: 10, height: 10, background: '#58A6FF', border: `2px solid ${BG_CARD}`, top: -6 }}
+        style={{ width: 10, height: 10, background: '#4F3CC9', border: `2px solid ${BG_CARD}`, top: -6 }}
       />
       <Handle
         type="source"
@@ -228,7 +228,7 @@ function AddNoteNode({ id, data }) {
 
 const inputStyle = {
   width: '100%',
-  background: '#0D1117',
+  background: '#F9FAFB',
   border: `1px solid ${BORDER}`,
   borderRadius: 5,
   color: TEXT_PRI,
@@ -468,7 +468,7 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
         <button
           onClick={handleSave}
           style={{
-            background: '#238636',
+            background: '#4F3CC9',
             border: 'none',
             borderRadius: 7,
             color: '#fff',
@@ -550,13 +550,13 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             marginTop: 12,
             padding: '10px 10px',
             borderRadius: 7,
-            background: '#0D1117',
+            background: '#F3F4F6',
             border: `1px solid ${BORDER}`,
             fontSize: 11,
             color: TEXT_SEC,
             lineHeight: 1.5,
           }}>
-            <span style={{ fontWeight: 600, color: '#58A6FF' }}>Dica:</span> Arraste um bloco para o canvas. Conecte os nós puxando do círculo inferior de um para o superior do próximo.
+            <span style={{ fontWeight: 600, color: '#4F3CC9' }}>Dica:</span> Arraste um bloco para o canvas. Conecte os nós puxando do círculo inferior de um para o superior do próximo.
           </div>
         </aside>
 
@@ -578,14 +578,14 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             deleteKeyCode="Delete"
           >
             <Background
-              color="#21262D"
+              color="#E5E7EB"
               gap={20}
               size={1}
               style={{ background: BG_MAIN }}
             />
             <Controls
               style={{
-                background: BG_CARD,
+                background: '#fff',
                 border: `1px solid ${BORDER}`,
                 borderRadius: 8,
               }}
@@ -605,17 +605,17 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             }}>
               <div style={{
                 width: 56, height: 56, borderRadius: 16,
-                background: '#21262D',
-                border: `1px dashed ${BORDER}`,
+                background: '#EDE9FE',
+                border: `1px dashed #C4B5FD`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 margin: '0 auto 12px',
               }}>
-                <Zap size={24} style={{ color: '#30363D' }} />
+                <Zap size={24} style={{ color: '#7C3AED' }} />
               </div>
               <p style={{ fontSize: 14, fontWeight: 500, color: TEXT_SEC, marginBottom: 4 }}>
                 Arraste um gatilho do painel lateral para começar
               </p>
-              <p style={{ fontSize: 12, color: '#484F58' }}>
+              <p style={{ fontSize: 12, color: '#9CA3AF' }}>
                 Conecte os nós para criar o fluxo de automação
               </p>
             </div>
