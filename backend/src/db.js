@@ -65,6 +65,8 @@ async function initDb() {
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE automations ALTER COLUMN trigger_stage SET DEFAULT '';
     ALTER TABLE automations ALTER COLUMN action_text SET DEFAULT '';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_nodes JSONB DEFAULT '[]';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_edges JSONB DEFAULT '[]';
   `).catch(() => {});
   console.log('Banco inicializado.');
 }
