@@ -221,9 +221,9 @@ async function connectWhatsApp(companyId) {
     });
 
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
-      if (type !== 'notify') return;
       for (const msg of messages) {
         // Capture messages sent from phone to existing leads
+        // fromMe messages arrive as type='append' (sent from another device like phone)
         if (msg.key.fromMe) {
           try {
             const remoteJid = msg.key.remoteJid || '';
@@ -247,6 +247,8 @@ async function connectWhatsApp(companyId) {
           } catch (e) { console.error('[WA] fromMe handler error:', e.message); }
           continue;
         }
+        // Only process incoming messages when type='notify'
+        if (type !== 'notify') continue;
         // Skip already processed messages (dedup on reconnect)
         const msgId = msg.key.id;
         if (msgId && processedMsgIds.has(msgId)) continue;
