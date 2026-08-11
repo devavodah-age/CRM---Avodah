@@ -81,6 +81,17 @@ export default function PulsoCRM() {
   // do Claude. Numa hospedagem de verdade, dá pra guardar em cookie seguro.
   const [token, setToken] = useState(null);
   const [company, setCompany] = useState(null);
+  // Restore session from localStorage on page reload
+  useEffect(() => {
+    const savedToken = localStorage.getItem('pulso_token');
+    const savedCompany = localStorage.getItem('pulso_company');
+    if (savedToken && savedCompany) {
+      try {
+        setToken(savedToken);
+        setCompany(JSON.parse(savedCompany));
+      } catch {}
+    }
+  }, []);
   const [authMode, setAuthMode] = useState("login"); // 'login' | 'signup'
   const [authForm, setAuthForm] = useState({ companyName: "", userName: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
@@ -167,7 +178,21 @@ export default function PulsoCRM() {
   }
 
   useEffect(() => {
-    if (token) loadData();
+    if (!token) return;
+    loadData();
+    // Check WA status on mount/token restore
+    fetch(`${API_URL}/whatsapp/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => { setWaStatus(data.status); if (data.qrDataUrl) setWaQr(data.qrDataUrl); })
+      .catch(() => {});
+    // Poll for new leads every 20s (so WhatsApp-created leads appear automatically)
+    const pollId = setInterval(() => {
+      fetch(`${API_URL}/leads`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setLeads(data); })
+        .catch(() => {});
+    }, 20000);
+    return () => clearInterval(pollId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -209,6 +234,8 @@ export default function PulsoCRM() {
       if (!res.ok) throw new Error(data.error || "Não foi possível entrar");
       setToken(data.token);
       setCompany(data.company);
+      localStorage.setItem('pulso_token', data.token);
+      localStorage.setItem('pulso_company', JSON.stringify(data.company));
     } catch (err) {
       setAuthError(
         err.message === "Failed to fetch"
@@ -226,6 +253,8 @@ export default function PulsoCRM() {
     setLeads([]);
     setAutomations([]);
     setSelectedLeadId(null);
+    localStorage.removeItem('pulso_token');
+    localStorage.removeItem('pulso_company');
   }
 
   async function moveLead(leadId, stageId) {
@@ -935,3 +964,4 @@ function AutomationCard({ auto, onToggle, onDelete }) {
     </div>
   );
 }
+
