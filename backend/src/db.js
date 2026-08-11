@@ -41,9 +41,13 @@ async function initDb() {
       id SERIAL PRIMARY KEY,
       company_id INTEGER NOT NULL REFERENCES companies(id),
       name TEXT NOT NULL,
-      trigger_stage TEXT NOT NULL,
-      action_text TEXT NOT NULL,
-      enabled BOOLEAN NOT NULL DEFAULT TRUE
+      trigger_stage TEXT NOT NULL DEFAULT '',
+      action_text TEXT NOT NULL DEFAULT '',
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      trigger_type TEXT DEFAULT 'stage_changed',
+      trigger_config JSONB DEFAULT '{}',
+      actions JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS whatsapp_sessions (
       company_id INTEGER PRIMARY KEY REFERENCES companies(id),
@@ -53,6 +57,15 @@ async function initDb() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Migrations for existing deployments
+  await pool.query(`
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'stage_changed';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS trigger_config JSONB DEFAULT '{}';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS actions JSONB DEFAULT '[]';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE automations ALTER COLUMN trigger_stage SET DEFAULT '';
+    ALTER TABLE automations ALTER COLUMN action_text SET DEFAULT '';
+  `).catch(() => {});
   console.log('Banco inicializado.');
 }
 
