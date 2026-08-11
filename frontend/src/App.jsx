@@ -320,18 +320,6 @@ export default function PulsoCRM() {
       if (waStatus === 'open' && selectedLead?.phone) {
         sendWhatsAppMessage(selectedLead.id, selectedLead.phone, text).catch(() => {});
       }
-      // Simula uma resposta do lead só na tela, pra dar vida ao protótipo.
-      // Isso NÃO é salvo no banco ainda — vira real quando plugarmos o WhatsApp de verdade.
-      setTimeout(() => {
-        const reply = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
-        setLeads((prev) =>
-          prev.map((l) =>
-            l.id === targetId
-              ? { ...l, messages: [...l.messages, { id: `local-${nextId()}`, from_type: "lead", text: reply, created_at: "" }] }
-              : l
-          )
-        );
-      }, 1200);
     } catch (err) {
       addToast(`Não consegui enviar a mensagem: ${err.message}`);
     }
