@@ -196,6 +196,24 @@ export default function PulsoCRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // Poll messages for the open lead chat every 5s
+  useEffect(() => {
+    if (!token || !selectedLeadId) return;
+    const pollMessages = () => {
+      fetch(`${API_URL}/leads/${selectedLeadId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(msgs => {
+          if (Array.isArray(msgs)) {
+            setLeads(prev => prev.map(l => l.id === selectedLeadId ? { ...l, messages: msgs } : l));
+          }
+        })
+        .catch(() => {});
+    };
+    pollMessages();
+    const id = setInterval(pollMessages, 5000);
+    return () => clearInterval(id);
+  }, [token, selectedLeadId]);
+
   useEffect(() => {
     if (!token || !waPolling) return;
     const poll = async () => {
