@@ -200,6 +200,26 @@ async function connectWhatsApp(companyId) {
     });
 
     const processedMsgIds = new Set();
+    // When WhatsApp syncs contacts, resolve @lid -> real phone number in leads
+    socket.ev.on('contacts.upsert', async (contacts) => {
+      for (const contact of contacts) {
+        try {
+          // contact.id = @s.whatsapp.net (real phone), contact.lid = @lid (opaque ID)
+          if (contact.id && contact.id.endsWith('@s.whatsapp.net') && contact.lid) {
+            const realPhone = contact.id.replace('@s.whatsapp.net', '');
+            const lidId = typeof contact.lid === 'string'
+              ? contact.lid.replace(/@[^@]+$/, '')
+              : String(contact.lid);
+            // Update leads that have the @lid ID as phone
+            await pool.query(
+              'UPDATE leads SET phone= WHERE company_id= AND (phone= OR phone=)',
+              [realPhone, companyId, lidId, contact.lid]
+            );
+          }
+        } catch (e) { console.error('[WA] contacts.upsert update error:', e.message); }
+      }
+    });
+
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const msg of messages) {
