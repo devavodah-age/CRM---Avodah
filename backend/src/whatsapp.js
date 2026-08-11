@@ -202,16 +202,39 @@ async function connectWhatsApp(companyId) {
       if (type !== 'notify') return;
       for (const msg of messages) {
         if (msg.key.fromMe) continue;
-        const phone = (msg.key.remoteJid || '').replace('@s.whatsapp.net', '').replace('@g.us', '');
+        const remoteJid = msg.key.remoteJid || '';
+        if (remoteJid.endsWith('@g.us')) continue; // ignore groups
+        const phone = remoteJid.replace('@s.whatsapp.net', '');
         if (!phone) continue;
         const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
         if (!text) continue;
         try {
-          const lead = await pool.query('SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1', [companyId, `%${phone}%`]);
-          if (lead.rows.length) {
-            await pool.query('INSERT INTO messages (lead_id, from_type, text) VALUES ($1,$2,$3)', [lead.rows[0].id, 'lead', text]);
+          let leadResult = await pool.query(
+            'SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
+            [companyId, `%${phone}%`]
+          );
+          let leadId;
+          if (leadResult.rows.length) {
+            leadId = leadResult.rows[0].id;
+          } else {
+            // Auto-create lead for unknown number
+            const name = msg.pushName || phone;
+            const newLead = await pool.query(
+              "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id",
+              [companyId, name, phone]
+            );
+            leadId = newLead.rows[0].id;
+            await pool.query(
+              "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
+              [leadId, `Lead criado automaticamente via WhatsApp`]
+            );
+            console.log('[WA] Auto-created lead for', phone);
           }
-        } catch {}
+          await pool.query(
+            "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'lead',$2)",
+            [leadId, text]
+          );
+        } catch (e) { console.error('[WA] message handler error:', e.message); }
       }
     });
 
