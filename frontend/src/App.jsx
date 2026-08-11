@@ -605,7 +605,7 @@ export default function PulsoCRM() {
                         <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
                           <td className="px-4 py-3 font-medium">{lead.name}</td>
                           <td className="px-4 py-3 text-gray-500">{lead.company_name}</td>
-                          <td className="px-4 py-3 text-gray-500 pulso-mono">{lead.phone}</td>
+                          <td className="px-4 py-3 text-gray-500 pulso-mono">{(lead.phone || "").replace(/@.*$/, "")}</td>
                           <td className="px-4 py-3 pulso-mono">{formatBRL(lead.value)}</td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: color + "22", color }}>
@@ -711,7 +711,7 @@ export default function PulsoCRM() {
                 <div>
                   <p className="font-semibold text-sm">{selectedLead.name}</p>
                   <p className="text-xs text-gray-400 flex items-center gap-1">
-                    <Phone size={11} /> {selectedLead.phone}
+                    <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
                   </p>
                 </div>
               </div>
@@ -844,7 +844,7 @@ function LeadCard({ lead, color, stage, onDragStart, onClick }) {
       <p className="text-xs text-gray-400 mt-0.5">{lead.company_name}</p>
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs font-semibold pulso-mono" style={{ color }}>{formatBRL(lead.value)}</span>
-        <span className="text-[10px] text-gray-300 pulso-mono">{(lead.phone || "").slice(-9)}</span>
+        <span className="text-[10px] text-gray-300 pulso-mono">{(lead.phone || "").replace(/@.*$/, "").slice(-9)}</span>
       </div>
       {lastMsg && (
         <p className="text-[11px] text-gray-400 mt-2 italic truncate border-t border-gray-50 pt-2">
