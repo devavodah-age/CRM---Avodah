@@ -1,13 +1,8 @@
 const express = require('express');
 const pool = require('../db');
+const { triggerAutomations } = require('../automationEngine');
 
 const router = express.Router();
-
-const AUTO_MESSAGES = {
-  novo: (first) => `Olá ${first}! Obrigado pelo contato, sou da equipe comercial 🙌`,
-  proposta: (first) => `Oi ${first}, tudo bem? Só confirmando se a proposta chegou certinho 📄`,
-  negociacao: (first) => `${first}, vamos fechar? Fico à disposição para qualquer dúvida!`,
-};
 
 async function attachMessages(lead) {
   const result = await pool.query('SELECT * FROM messages WHERE lead_id = $1 ORDER BY id ASC', [lead.id]);
@@ -36,6 +31,7 @@ router.post('/', async (req, res) => {
     const leadId = result.rows[0].id;
     await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'system', 'Lead criado manualmente')", [leadId]);
     const lead = (await pool.query('SELECT * FROM leads WHERE id = $1', [leadId])).rows[0];
+    triggerAutomations(req.companyId, 'new_lead', { lead }).catch(console.error);
     res.status(201).json(await attachMessages(lead));
   } catch (err) {
     console.error(err);
@@ -52,26 +48,10 @@ router.patch('/:id/stage', async (req, res) => {
     if (!stage) return res.status(400).json({ error: 'Informe a nova etapa.' });
 
     await pool.query('UPDATE leads SET stage = $1 WHERE id = $2', [stage, lead.id]);
-
-    const autoResult = await pool.query(
-      'SELECT * FROM automations WHERE company_id = $1 AND trigger_stage = $2 AND enabled = TRUE',
-      [req.companyId, stage]
-    );
-    const automation = autoResult.rows[0];
-
-    if (automation) {
-      await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'system', $2)", [
-        lead.id, `🤖 Automação "${automation.name}" disparada`
-      ]);
-      const template = AUTO_MESSAGES[stage];
-      if (template) {
-        const first = lead.name.split(' ')[0];
-        await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'me', $2)", [lead.id, template(first)]);
-      }
-    }
+    triggerAutomations(req.companyId, 'stage_changed', { lead: { ...lead, stage }, stage }).catch(console.error);
 
     const updated = (await pool.query('SELECT * FROM leads WHERE id = $1', [lead.id])).rows[0];
-    res.json({ lead: await attachMessages(updated), automationTriggered: automation ? automation.name : null });
+    res.json({ lead: await attachMessages(updated), automationTriggered: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });
