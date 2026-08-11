@@ -199,10 +199,18 @@ async function connectWhatsApp(companyId) {
       }
     });
 
+    const processedMsgIds = new Set();
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const msg of messages) {
         if (msg.key.fromMe) continue;
+        // Skip already processed messages (dedup on reconnect)
+        const msgId = msg.key.id;
+        if (msgId && processedMsgIds.has(msgId)) continue;
+        if (msgId) processedMsgIds.add(msgId);
+        // Skip messages older than 60s (replayed on reconnect)
+        const msgTs = (msg.messageTimestamp || 0) * 1000;
+        if (Date.now() - msgTs > 60000) continue;
         const remoteJid = msg.key.remoteJid || '';
         if (remoteJid.endsWith('@g.us')) continue; // ignore groups
         const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
