@@ -204,7 +204,7 @@ async function connectWhatsApp(companyId) {
         if (msg.key.fromMe) continue;
         const remoteJid = msg.key.remoteJid || '';
         if (remoteJid.endsWith('@g.us')) continue; // ignore groups
-        const phone = remoteJid.replace('@s.whatsapp.net', '');
+        const phone = remoteJid.replace(/@[^@]+$/, ''); // strip @s.whatsapp.net, @lid, etc.
         if (!phone) continue;
         const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
         if (!text) continue;
