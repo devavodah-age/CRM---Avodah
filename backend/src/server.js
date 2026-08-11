@@ -30,11 +30,15 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
   console.log(`Pulso CRM backend rodando em http://localhost:${PORT}`);
 
-  // Auto-reconnect WhatsApp sessions that were active before last deploy
+  // Auto-reconnect WhatsApp sessions that have credentials saved.
+  // Query by creds IS NOT NULL (not status='open') because Railway SIGTERM
+  // may trigger connection.update(close) and set status='disconnected' before
+  // the new server starts — so we must reconnect regardless of last status.
+  // Intentionally logged-out sessions have creds=NULL and are excluded.
   setTimeout(async () => {
     try {
       const { rows } = await pool.query(
-        "SELECT company_id FROM whatsapp_sessions WHERE creds IS NOT NULL AND status = 'open'"
+        "SELECT company_id FROM whatsapp_sessions WHERE creds IS NOT NULL"
       );
       if (rows.length === 0) {
         console.log("[WA] No active sessions to reconnect");
