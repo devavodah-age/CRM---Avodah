@@ -204,7 +204,7 @@ async function connectWhatsApp(companyId) {
         if (msg.key.fromMe) continue;
         const remoteJid = msg.key.remoteJid || '';
         if (remoteJid.endsWith('@g.us')) continue; // ignore groups
-        const phone = remoteJid.replace(/@[^@]+$/, ''); // strip @s.whatsapp.net, @lid, etc.
+        const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
         if (!phone) continue;
         const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
         if (!text) continue;
@@ -259,7 +259,7 @@ async function disconnectWhatsApp(companyId) {
 async function sendMessage(companyId, phone, text) {
   const conn = connections.get(companyId);
   if (!conn || conn.status !== 'open') throw new Error('WhatsApp não conectado');
-  const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
+  const jid = phone.includes('@') ? phone : phone.replace(/\D/g, '') + '@s.whatsapp.net';
   await conn.socket.sendMessage(jid, { text });
 }
 
