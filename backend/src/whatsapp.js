@@ -219,8 +219,6 @@ async function connectWhatsApp(companyId) {
               const msgId = msg.key.id;
               if (msgId && processedMsgIds.has(msgId)) continue;
               if (msgId) processedMsgIds.add(msgId);
-              const msgTs = (msg.messageTimestamp || 0) * 1000;
-              if (Date.now() - msgTs > 60000) continue;
               await pool.query(
                 "INSERT INTO messages (lead_id, from_type, text) VALUES (,'me',)",
                 [leadResult.rows[0].id, text]
