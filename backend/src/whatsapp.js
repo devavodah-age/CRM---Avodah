@@ -14,13 +14,27 @@ process.on('unhandledRejection', (reason) => {
   console.error('[WA] unhandledRejection:', reason?.message || reason);
 });
 
+// Restore Buffer/Uint8Array objects from PostgreSQL JSONB (returns plain objects)
+function restoreBuffers(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(restoreBuffers);
+  if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data);
+  const result = {};
+  for (const key of Object.keys(obj)) result[key] = restoreBuffers(obj[key]);
+  return result;
+}
+
 const connections = new Map();
 
 async function loadAuthState(companyId) {
   try {
     const res = await pool.query('SELECT creds, keys FROM whatsapp_sessions WHERE company_id = $1', [companyId]);
     if (!res.rows.length) return { creds: null, keys: {} };
-    return { creds: res.rows[0].creds, keys: res.rows[0].keys || {} };
+    // Restore Buffer objects lost during JSONB serialization
+    const creds = res.rows[0].creds ? restoreBuffers(res.rows[0].creds) : null;
+    const keys = restoreBuffers(res.rows[0].keys || {});
+    return { creds, keys };
   } catch (e) { console.error('[WA] loadAuthState error:', e.message); return { creds: null, keys: {} }; }
 }
 
@@ -59,7 +73,8 @@ function buildKeysStore(companyId, initialKeys) {
       const result = {};
       for (const id of ids) {
         const val = keysStore[`${type}-${id}`];
-        result[id] = val ? JSON.parse(JSON.stringify(val)) : undefined;
+        // Restore Buffers that may have been deserialized as plain objects from DB
+        result[id] = val !== undefined ? restoreBuffers(JSON.parse(JSON.stringify(val))) : undefined;
       }
       return result;
     },
@@ -165,6 +180,13 @@ async function connectWhatsApp(companyId) {
         if (code === DisconnectReason.badSession || code === 500) {
           console.log('[WA] Bad session — clearing auth state, user must reconnect manually');
           await clearAuthState(companyId);
+          return;
+        }
+
+        if (code === DisconnectReason.restartRequired || code === 515) {
+          // Stream restart needed (happens after QR scan) — reconnect immediately with saved creds
+          console.log('[WA] Restart required — reconnecting in 1s');
+          setTimeout(() => connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message)), 1000);
           return;
         }
 
