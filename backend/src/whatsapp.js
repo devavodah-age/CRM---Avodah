@@ -249,13 +249,10 @@ async function connectWhatsApp(companyId) {
         }
         // Only process incoming messages when type='notify'
         if (type !== 'notify') continue;
-        // Skip already processed messages (dedup on reconnect)
         const msgId = msg.key.id;
+        // In-memory dedup for same session
         if (msgId && processedMsgIds.has(msgId)) continue;
         if (msgId) processedMsgIds.add(msgId);
-        // Skip messages older than 60s (replayed on reconnect)
-        const msgTs = (msg.messageTimestamp || 0) * 1000;
-        if (Date.now() - msgTs > 60000) continue;
         const remoteJid = msg.key.remoteJid || '';
         if (remoteJid.endsWith('@g.us')) continue; // ignore groups
         const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
@@ -263,31 +260,53 @@ async function connectWhatsApp(companyId) {
         const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
         if (!text) continue;
         try {
+          // DB-level dedup: skip if this wa_msg_id was already saved
+          if (msgId) {
+            const dup = await pool.query('SELECT id FROM messages WHERE wa_msg_id=$1 LIMIT 1', [msgId]);
+            if (dup.rows.length) continue;
+          }
           let leadResult = await pool.query(
-            'SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
+            'SELECT id, name FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
             [companyId, `%${phone}%`]
           );
-          let leadId;
+          let leadId; let isNewLead = false;
           if (leadResult.rows.length) {
             leadId = leadResult.rows[0].id;
           } else {
             // Auto-create lead for unknown number
             const name = msg.pushName || phone;
             const newLead = await pool.query(
-              "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id",
+              "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id, name",
               [companyId, name, phone]
             );
             leadId = newLead.rows[0].id;
+            isNewLead = true;
             await pool.query(
               "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
               [leadId, `Lead criado automaticamente via WhatsApp`]
             );
             console.log('[WA] Auto-created lead for', phone);
+            // n8n webhook: new lead
+            if (process.env.N8N_WEBHOOK_URL) {
+              fetch(process.env.N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: 'new_lead', leadId, name: newLead.rows[0].name, phone, companyId }),
+              }).catch(() => {});
+            }
           }
           await pool.query(
-            "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'lead',$2)",
-            [leadId, text]
+            "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'lead',$2,$3)",
+            [leadId, text, msgId || null]
           );
+          // n8n webhook: message received
+          if (process.env.N8N_WEBHOOK_URL) {
+            fetch(process.env.N8N_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ event: 'message_received', leadId, phone, message: text, companyId }),
+            }).catch(() => {});
+          }
           // Trigger message_received automations
           triggerAutomations(companyId, 'message_received', { lead: { id: leadId, phone }, message: text }).catch(console.error);
         } catch (e) { console.error('[WA] message handler error:', e.message); }
