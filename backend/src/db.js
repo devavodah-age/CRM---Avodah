@@ -35,6 +35,7 @@ async function initDb() {
       lead_id INTEGER NOT NULL REFERENCES leads(id),
       from_type TEXT NOT NULL CHECK(from_type IN ('me','lead','system')),
       text TEXT NOT NULL,
+      wa_msg_id TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS automations (
@@ -67,6 +68,11 @@ async function initDb() {
     ALTER TABLE automations ALTER COLUMN action_text SET DEFAULT '';
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_nodes JSONB DEFAULT '[]';
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_edges JSONB DEFAULT '[]';
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS wa_msg_id TEXT;
+  `).catch(() => {});
+  // Unique index for wa_msg_id deduplication
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS messages_wa_msg_id_idx ON messages(wa_msg_id) WHERE wa_msg_id IS NOT NULL;
   `).catch(() => {});
   console.log('Banco inicializado.');
 }
