@@ -4,6 +4,9 @@
   "description": "Backend do Pulso CRM com PostgreSQL e WhatsApp",
   "main": "src/server.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js"
