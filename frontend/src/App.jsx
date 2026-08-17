@@ -129,6 +129,11 @@ export default function PulsoCRM() {
   const [waPolling, setWaPolling] = useState(false);
   const [editingLeadField, setEditingLeadField] = useState(null); // { field, value }
 
+  // Configurações / Pixel
+  const [settings, setSettings] = useState({ pixel_id: '', capi_token_set: false });
+  const [settingsForm, setSettingsForm] = useState({ pixel_id: '', capi_token: '' });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
   const idRef = useRef(1);
   const nextId = () => {
     idRef.current += 1;
@@ -182,6 +187,17 @@ export default function PulsoCRM() {
     }
   }
 
+  // Carrega Pixel do Facebook dinamicamente com o pixel_id da empresa
+  function loadFbPixel(pixelId) {
+    if (!pixelId || window._fbPixelLoaded) return;
+    window._fbPixelLoaded = true;
+    /* eslint-disable */
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    /* eslint-enable */
+    window.fbq('init', pixelId);
+    window.fbq('track', 'PageView');
+  }
+
   useEffect(() => {
     if (!token) return;
     loadData();
@@ -189,6 +205,15 @@ export default function PulsoCRM() {
     fetch(`${API_URL}/whatsapp/status`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => { setWaStatus(data.status); if (data.qrDataUrl) setWaQr(data.qrDataUrl); })
+      .catch(() => {});
+    // Carregar configurações e inicializar Pixel
+    fetch(`${API_URL}/settings`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => {
+        setSettings(data);
+        setSettingsForm({ pixel_id: data.pixel_id || '', capi_token: '' });
+        if (data.pixel_id) loadFbPixel(data.pixel_id);
+      })
       .catch(() => {});
     // Poll for new leads every 20s (so WhatsApp-created leads appear automatically)
     const pollId = setInterval(() => {
@@ -350,6 +375,8 @@ export default function PulsoCRM() {
       setNewLeadForm({ name: "", company_name: "", value: "", phone: "" });
       setShowNewLeadModal(false);
       addToast(`Lead "${lead.name}" criado`);
+      // Pixel browser-side (redundância com CAPI server-side)
+      if (window.fbq) window.fbq('track', 'Lead');
     } catch (err) {
       addToast(`Não consegui criar o lead: ${err.message}`);
     }
@@ -548,6 +575,7 @@ export default function PulsoCRM() {
           <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={19} />} title="Contatos" />
           <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={19} />} title="Automações" />
           <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={19} />} title="WhatsApp" />
+          <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={19} />} title="Configurações" />
         </nav>
         <div className="mt-auto flex flex-col gap-4 items-center">
           <button title="Configurações" className="text-white/50 hover:text-white/90 transition-colors">
@@ -755,6 +783,80 @@ export default function PulsoCRM() {
               )}
             </div>
           )}
+
+          {view === 'configuracoes' && (
+            <div style={{ padding: '32px', maxWidth: 520, margin: '0 auto' }}>
+              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, color: INK }}>Configurações</h2>
+              <p style={{ color: '#6B7280', marginBottom: 28, fontSize: 14 }}>Integre seu Pixel do Facebook para rastrear leads automaticamente.</p>
+
+              <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: INK }}>Meta Pixel + Conversions API</h3>
+                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>
+                  Quando um lead é criado (manual ou via WhatsApp), disparamos automaticamente um evento <strong>Lead</strong> para o seu Pixel.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Pixel ID</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 1234567890123456"
+                      value={settingsForm.pixel_id}
+                      onChange={e => setSettingsForm(f => ({ ...f, pixel_id: e.target.value }))}
+                      style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                      Token da API de Conversões
+                      {settings.capi_token_set && <span style={{ marginLeft: 8, color: '#16A34A', fontWeight: 400 }}>✓ configurado</span>}
+                    </label>
+                    <input
+                      type="password"
+                      placeholder={settings.capi_token_set ? '••••••••••••• (deixe em branco para manter)' : 'Cole o token aqui'}
+                      value={settingsForm.capi_token}
+                      onChange={e => setSettingsForm(f => ({ ...f, capi_token: e.target.value }))}
+                      style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                      Encontre em: Gerenciador de Eventos → Configurações → API de Conversões → Gerar token de acesso
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      setSettingsSaving(true);
+                      try {
+                        const body = { pixel_id: settingsForm.pixel_id };
+                        if (settingsForm.capi_token) body.capi_token = settingsForm.capi_token;
+                        const updated = await apiFetch('/settings', { method: 'PUT', body: JSON.stringify(body) });
+                        setSettings(updated);
+                        setSettingsForm(f => ({ ...f, capi_token: '' }));
+                        if (updated.pixel_id) loadFbPixel(updated.pixel_id);
+                        addToast('Configurações salvas!');
+                      } catch (err) {
+                        addToast(`Erro: ${err.message}`);
+                      } finally {
+                        setSettingsSaving(false);
+                      }
+                    }}
+                    disabled={settingsSaving}
+                    style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: settingsSaving ? 0.7 : 1 }}
+                  >
+                    {settingsSaving ? 'Salvando...' : 'Salvar configurações'}
+                  </button>
+                </div>
+              </div>
+
+              {settings.pixel_id && (
+                <div style={{ marginTop: 16, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#166534' }}>
+                  ✓ Pixel <strong>{settings.pixel_id}</strong> ativo — eventos <code>Lead</code> sendo disparados ao criar contatos.
+                </div>
+              )}
+            </div>
+          )}
+
         </main>
       </div>
 

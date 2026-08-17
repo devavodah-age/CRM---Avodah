@@ -7,6 +7,7 @@ const pino = require('pino');
 const QRCode = require('qrcode');
 const pool = require('./db');
 const { triggerAutomations } = require('./automationEngine');
+const { fireLeadEvent } = require('./metaPixel');
 
 process.on('uncaughtException', (err) => {
   console.error('[WA] uncaughtException:', err.message, err.stack);
@@ -340,6 +341,7 @@ async function connectWhatsApp(companyId) {
                 [leadId, 'Lead criado automaticamente via WhatsApp']
               );
               console.log('[WA] Auto-created lead for', phone);
+              fireLeadEvent(companyId, { name: msg.pushName || phone, phone }).catch(console.error);
               // n8n webhook: new lead
               if (process.env.N8N_WEBHOOK_URL) {
                 fetch(process.env.N8N_WEBHOOK_URL, {

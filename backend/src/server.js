@@ -6,6 +6,7 @@ const authRoutes = require("./routes/auth");
 const leadsRoutes = require("./routes/leads");
 const automationsRoutes = require("./routes/automations");
 const whatsappRoutes = require("./routes/whatsapp");
+const settingsRoutes = require("./routes/settings");
 const { connectWhatsApp, sendMessage } = require("./whatsapp");
 const { setWhatsAppSender, startJobProcessor } = require("./automationEngine");
 const pool = require("./db");
@@ -28,6 +29,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/leads", requireAuth, leadsRoutes);
 app.use("/api/automations", requireAuth, automationsRoutes);
 app.use("/api/whatsapp", requireAuth, whatsappRoutes);
+app.use("/api/settings", requireAuth, settingsRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {

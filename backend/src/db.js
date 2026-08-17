@@ -98,6 +98,12 @@ async function initDb() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS leads_company_id_idx ON leads(company_id);
   `).catch(() => {});
+  // Meta Pixel + CAPI per company
+  await pool.query(`
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS pixel_id TEXT;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS capi_token TEXT;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS capi_token_set BOOLEAN NOT NULL DEFAULT FALSE;
+  `).catch(() => {});
   console.log('Banco inicializado.');
 }
 

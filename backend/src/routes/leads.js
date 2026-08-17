@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const { triggerAutomations } = require('../automationEngine');
 const { sendMessage, getStatus } = require('../whatsapp');
+const { fireLeadEvent } = require('../metaPixel');
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ router.post('/', async (req, res) => {
     await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'system', 'Lead criado manualmente')", [leadId]);
     const lead = (await pool.query('SELECT * FROM leads WHERE id = $1', [leadId])).rows[0];
     triggerAutomations(req.companyId, 'new_lead', { lead }).catch(console.error);
+    fireLeadEvent(req.companyId, lead).catch(console.error);
     res.status(201).json(await attachMessages(lead));
   } catch (err) {
     console.error(err);
