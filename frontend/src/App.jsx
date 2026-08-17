@@ -21,6 +21,13 @@ import {
   DollarSign,
   Edit2,
   Check,
+  BarChart2,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  MessageSquare,
+  ChevronRight,
+  Calendar,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 
@@ -68,6 +75,25 @@ function formatBRL(v) {
     currency: "BRL",
     maximumFractionDigits: 0,
   });
+}
+
+function formatPhone(raw) {
+  if (!raw) return '';
+  const clean = raw.replace(/\D/g, '');
+  if (clean.startsWith('55') && clean.length === 13)
+    return `+55 (${clean.slice(2,4)}) ${clean.slice(4,9)}-${clean.slice(9)}`;
+  if (clean.startsWith('55') && clean.length === 12)
+    return `+55 (${clean.slice(2,4)}) ${clean.slice(4,8)}-${clean.slice(8)}`;
+  if (clean.length === 11)
+    return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+  if (clean.length === 10)
+    return `(${clean.slice(0,2)}) ${clean.slice(2,6)}-${clean.slice(6)}`;
+  return clean ? `+${clean}` : '';
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
 const AUTO_REPLIES = [
@@ -144,6 +170,9 @@ export default function PulsoCRM() {
   const csvInputRef = useRef(null);
   const [importPreview, setImportPreview] = useState(null); // { rows: [], fileName }
   const [importing, setImporting] = useState(false);
+
+  // Conversas view
+  const [convLeadId, setConvLeadId] = useState(null);
 
   const idRef = useRef(1);
   const nextId = () => {
@@ -249,15 +278,16 @@ export default function PulsoCRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Poll messages for the open lead chat every 5s
+  // Poll messages for the open lead chat every 5s (drawer or conversas view)
+  const activeChatLeadId = selectedLeadId || convLeadId;
   useEffect(() => {
-    if (!token || !selectedLeadId) return;
+    if (!token || !activeChatLeadId) return;
     const pollMessages = () => {
-      fetch(`${API_URL}/leads/${selectedLeadId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`${API_URL}/leads/${activeChatLeadId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
         .then(msgs => {
           if (Array.isArray(msgs)) {
-            setLeads(prev => prev.map(l => l.id === selectedLeadId ? { ...l, messages: msgs } : l));
+            setLeads(prev => prev.map(l => l.id === activeChatLeadId ? { ...l, messages: msgs } : l));
           }
         })
         .catch(() => {});
@@ -265,7 +295,7 @@ export default function PulsoCRM() {
     pollMessages();
     const id = setInterval(pollMessages, 5000);
     return () => clearInterval(id);
-  }, [token, selectedLeadId]);
+  }, [token, activeChatLeadId]);
 
   useEffect(() => {
     if (!token || !waPolling) return;
@@ -569,9 +599,11 @@ export default function PulsoCRM() {
   });
 
   const titles = {
+    dashboard: ["Dashboard", "Visão geral do seu desempenho e atividades"],
     pipeline: ["Pipeline de Vendas", "Arraste os cards entre as etapas do funil"],
     contatos: ["Contatos", "Todos os leads e clientes em um só lugar"],
     automacoes: ["Automações", "Regras que disparam ações sozinhas"],
+    conversas: ["Conversas", "Acompanhe as conversas com seus leads"],
     whatsapp: ["WhatsApp", "Conecte e gerencie sua conta WhatsApp"],
     configuracoes: ["Configurações", "Pixel, API de Conversões e outras integrações"],
   };
@@ -657,9 +689,11 @@ export default function PulsoCRM() {
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400" style={{ animation: "pulso-pulse 2s ease-in-out infinite" }} />
         </div>
         <nav className="flex flex-col gap-2 mt-4">
+          <SideBtn active={view === "dashboard"} onClick={() => setView("dashboard")} icon={<BarChart2 size={19} />} title="Dashboard" />
           <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={19} />} title="Pipeline" />
           <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={19} />} title="Contatos" />
           <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={19} />} title="Automações" />
+          <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={19} />} title="Conversas" />
           <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={19} />} title="WhatsApp" />
           <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={19} />} title="Configurações" />
         </nav>
@@ -681,7 +715,7 @@ export default function PulsoCRM() {
             <p className="text-xs text-gray-400">{titles[view][1]}</p>
           </div>
           <div className="flex items-center gap-3">
-            {view !== "automacoes" && view !== "configuracoes" && (
+            {!["automacoes","configuracoes","conversas","dashboard"].includes(view) && (
               <div className="relative">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -708,6 +742,11 @@ export default function PulsoCRM() {
                 <Plus size={15} /> Nova Automação
               </button>
             )}
+            {view === "conversas" && (
+              <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
+                <Plus size={15} /> Novo Lead
+              </button>
+            )}
           </div>
         </header>
 
@@ -715,6 +754,172 @@ export default function PulsoCRM() {
           {loadingData && (
             <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
               <Loader2 size={22} className="animate-spin" style={{ color: PRIMARY }} />
+            </div>
+          )}
+
+          {view === "dashboard" && (
+            <Dashboard leads={leads} />
+          )}
+
+          {view === "conversas" && (
+            <div className="h-full flex">
+              {/* Lista de conversas */}
+              <div className="w-80 flex-shrink-0 border-r border-black/5 overflow-y-auto pulso-scroll bg-white">
+                <div className="p-3 border-b border-black/5">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      placeholder="Pesquisar..."
+                      className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]"
+                    />
+                  </div>
+                </div>
+                {leads
+                  .filter(l => l.message_count > 0 && (
+                    !searchTerm || l.name.toLowerCase().includes(searchTerm.toLowerCase())
+                  ))
+                  .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
+                  .map(lead => {
+                    const stage = stageById(lead.stage);
+                    const color = stageColor(stage);
+                    const isActive = convLeadId === lead.id;
+                    return (
+                      <div
+                        key={lead.id}
+                        onClick={() => setConvLeadId(lead.id)}
+                        className="flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-black/4 hover:bg-gray-50 transition-colors"
+                        style={{ backgroundColor: isActive ? PRIMARY + '10' : undefined, borderLeft: isActive ? `3px solid ${PRIMARY}` : '3px solid transparent' }}
+                      >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: color }}>
+                          {lead.name.split(' ').map(p => p[0]).slice(0,2).join('')}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-sm truncate">{lead.name}</p>
+                            <span className="text-[10px] text-gray-400 flex-shrink-0 ml-1">{formatDate(lead.created_at)}</span>
+                          </div>
+                          <p className="text-xs text-gray-400 truncate mt-0.5">{lead.last_message || 'Sem mensagens'}</p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: color + '22', color }}>{stage.name}</span>
+                            <span className="text-[10px] text-gray-300">{lead.message_count} msg</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {leads.filter(l => l.message_count > 0).length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-64 text-center px-6">
+                    <MessageSquare size={32} className="text-gray-200 mb-3" />
+                    <p className="text-sm font-semibold text-gray-400">Sem conversas ainda</p>
+                    <p className="text-xs text-gray-300 mt-1">Conversas criadas via WhatsApp aparecem aqui</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Painel de chat */}
+              {convLeadId ? (() => {
+                const lead = leads.find(l => l.id === convLeadId);
+                if (!lead) return null;
+                return (
+                  <div className="flex-1 flex flex-col h-full">
+                    {/* Header do chat */}
+                    <div className="px-5 py-3 border-b border-black/5 bg-white flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: PRIMARY }}>
+                          {lead.name.split(' ').map(p => p[0]).slice(0,2).join('')}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">{lead.name}</p>
+                          <p className="text-xs text-gray-400 flex items-center gap-1">
+                            <Phone size={10} /> {formatPhone(lead.phone) || 'Sem telefone'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ background: stageColor(stageById(lead.stage)) + '22', color: stageColor(stageById(lead.stage)) }}>
+                          {stageById(lead.stage).name}
+                        </span>
+                        <button onClick={() => setSelectedLeadId(lead.id)} className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 border border-gray-200 rounded-lg px-2 py-1">
+                          Ver lead <ChevronRight size={11} />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Mensagens */}
+                    <div className="flex-1 overflow-y-auto pulso-scroll p-4 space-y-3 bg-[#F5F6FA]">
+                      {(lead.messages || []).map(m => {
+                        if (m.from_type === 'system') return (
+                          <div key={m.id} className="text-center text-[11px] text-gray-400 italic">{m.text}</div>
+                        );
+                        const mine = m.from_type === 'me';
+                        return (
+                          <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[70%] rounded-xl px-3 py-2 text-sm ${mine ? 'text-white rounded-br-sm' : 'bg-white text-gray-800 rounded-bl-sm border border-gray-100'}`} style={mine ? { backgroundColor: PRIMARY } : {}}>
+                              <p>{m.text}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Input */}
+                    {templates.length > 0 && (
+                      <div className="px-3 pt-2 bg-white relative">
+                        <button onClick={() => setShowTemplatesDropdown(v => !v)} className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1">
+                          📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
+                        </button>
+                        {showTemplatesDropdown && (
+                          <div className="absolute bottom-8 left-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-72 max-h-48 overflow-y-auto">
+                            {templates.map(t => (
+                              <button key={t.id} onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                                <p className="text-xs font-semibold text-gray-700">{t.name}</p>
+                                <p className="text-xs text-gray-400 truncate">{t.text}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="p-3 border-t border-black/5 bg-white flex items-center gap-2">
+                      <input
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            if (!chatInput.trim() || !convLeadId) return;
+                            const text = chatInput.trim();
+                            setChatInput('');
+                            apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
+                              .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
+                              .catch(err => addToast(`Erro: ${err.message}`));
+                          }
+                        }}
+                        placeholder="Escreva uma mensagem..."
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]"
+                      />
+                      <button
+                        onClick={() => {
+                          if (!chatInput.trim() || !convLeadId) return;
+                          const text = chatInput.trim();
+                          setChatInput('');
+                          apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
+                            .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
+                            .catch(err => addToast(`Erro: ${err.message}`));
+                        }}
+                        className="w-9 h-9 rounded-lg text-white flex items-center justify-center" style={{ backgroundColor: PRIMARY }}
+                      >
+                        <Send size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="flex-1 flex flex-col items-center justify-center bg-[#F5F6FA] text-center">
+                  <MessageSquare size={48} className="text-gray-200 mb-4" />
+                  <p className="text-base font-bold text-gray-400">Conversas</p>
+                  <p className="text-sm text-gray-300 mt-1">Acompanhe as conversas com seus leads</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -736,7 +941,7 @@ export default function PulsoCRM() {
                     <div className="px-3 pt-2 pb-1 text-xs text-gray-400 pulso-mono">{formatBRL(total)}</div>
                     <div className="flex-1 overflow-y-auto pulso-scroll p-2 space-y-2 min-h-[120px]">
                       {stageLeads.map((lead) => (
-                        <LeadCard key={lead.id} lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} />
+                        <LeadCard key={lead.id} lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
                       ))}
                       {stageLeads.length === 0 && (
                         <div className="text-xs text-gray-300 text-center py-6 border border-dashed border-gray-200 rounded-lg">Solte um lead aqui</div>
@@ -755,47 +960,67 @@ export default function PulsoCRM() {
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                       <th className="text-left font-semibold px-4 py-3">Nome</th>
-                      <th className="text-left font-semibold px-4 py-3">Empresa</th>
-                      <th className="text-left font-semibold px-4 py-3">Telefone</th>
+                      <th className="text-left font-semibold px-4 py-3">Contato</th>
+                      <th className="text-left font-semibold px-4 py-3">Tags</th>
                       <th className="text-left font-semibold px-4 py-3">Valor</th>
                       <th className="text-left font-semibold px-4 py-3">Etapa</th>
+                      <th className="text-left font-semibold px-4 py-3">Criado</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredLeads.map((lead) => {
                       const stage = stageById(lead.stage);
                       const color = stageColor(stage);
+                      const initials = lead.name.split(' ').map(p => p[0]).slice(0,2).join('');
                       return (
                         <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
-                          <td className="px-4 py-3 font-medium">{lead.name}</td>
-                          <td className="px-4 py-3 text-gray-500">{lead.company_name}</td>
-                          <td className="px-4 py-3 text-gray-500 pulso-mono" onClick={e => e.stopPropagation()}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0" style={{ backgroundColor: color }}>
+                                {initials}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm">{lead.name}</p>
+                                <p className="text-xs text-gray-400">Ticket: {formatBRL(lead.value)}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500" onClick={e => e.stopPropagation()}>
                             {editingLeadField?.field === 'phone' && editingLeadField?.id === lead.id ? (
                               <div className="flex items-center gap-1">
-                                <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9] w-36"
-                                  defaultValue={(lead.phone || "").replace(/@.*$/, "")}
+                                <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9] w-40"
+                                  defaultValue={(lead.phone || "").replace(/\D/g, '')}
                                   onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(lead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
                                 <button onClick={(e) => { updateLead(lead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} className="text-green-500"><Check size={12} /></button>
                               </div>
                             ) : (
-                              <span onClick={() => setEditingLeadField({ field: 'phone', id: lead.id })} className="cursor-pointer hover:text-gray-800 group flex items-center gap-1">
-                                {(lead.phone || "").replace(/@.*$/, "") || <span className="text-gray-300 italic">clique para editar</span>}
+                              <span onClick={() => setEditingLeadField({ field: 'phone', id: lead.id })} className="cursor-pointer hover:text-gray-800 group flex items-center gap-1 text-sm">
+                                <Phone size={12} className="text-gray-300" />
+                                {formatPhone(lead.phone) || <span className="text-gray-300 italic text-xs">clique para editar</span>}
                                 <Edit2 size={10} className="opacity-0 group-hover:opacity-100 text-gray-400" />
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 pulso-mono">{formatBRL(lead.value)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {(lead.tags || []).map(tag => (
+                                <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>{tag}</span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 pulso-mono text-sm">{formatBRL(lead.value)}</td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: color + "22", color }}>
                               {stage.name}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-xs text-gray-400">{formatDate(lead.created_at)}</td>
                         </tr>
                       );
                     })}
                     {filteredLeads.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="text-center text-gray-300 text-sm py-8">Nenhum lead ainda. Crie o primeiro com "Novo Lead".</td>
+                        <td colSpan={6} className="text-center text-gray-300 text-sm py-8">Nenhum lead ainda. Crie o primeiro com "Novo Lead".</td>
                       </tr>
                     )}
                   </tbody>
@@ -994,8 +1219,8 @@ export default function PulsoCRM() {
         </main>
       </div>
 
-      {/* Chat drawer */}
-      {selectedLead && (
+      {/* Chat drawer — só aparece fora da view conversas */}
+      {selectedLead && view !== 'conversas' && (
         <div className="fixed inset-0 z-40 flex justify-end">
           <div className="absolute inset-0 bg-black/20" onClick={() => setSelectedLeadId(null)} />
           <div className="relative w-96 h-full bg-white shadow-2xl flex flex-col">
@@ -1016,7 +1241,7 @@ export default function PulsoCRM() {
                       </div>
                     ) : (
                       <button onClick={() => setEditingLeadField({ field: 'phone' })} className="text-xs text-gray-400 flex items-center gap-1 hover:text-gray-700 group">
-                        <Phone size={11} /> {(selectedLead.phone || "").replace(/@.*$/, "")}
+                        <Phone size={11} /> {formatPhone(selectedLead.phone) || 'Sem telefone'}
                         <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                     )}
@@ -1257,34 +1482,171 @@ function SideBtn({ active, onClick, icon, title }) {
   );
 }
 
-function LeadCard({ lead, color, stage, onDragStart, onClick }) {
+function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
   const lastMsg = lead.messages[lead.messages.length - 1];
   const tags = lead.tags || [];
+  const initials = lead.name.split(' ').map(p => p[0]).slice(0,2).join('');
   return (
-    <div draggable onDragStart={(e) => onDragStart(e, lead.id)} onClick={onClick} className="bg-white rounded-lg shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${color}` }}>
-      <div className="flex items-start justify-between">
-        <p className="font-semibold text-sm">{lead.name}</p>
-        {stage.temp === 1 ? <Flame size={13} style={{ color }} /> : stage.temp === 0 ? <Snowflake size={13} style={{ color }} /> : null}
+    <div draggable onDragStart={(e) => onDragStart(e, lead.id)} onClick={onClick} className="bg-white rounded-xl shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border border-black/5">
+      <div className="flex items-start gap-2">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5" style={{ backgroundColor: color }}>
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-1">
+            <p className="font-semibold text-sm leading-tight">{lead.name}</p>
+            {stage.temp === 1 ? <Flame size={12} style={{ color }} className="flex-shrink-0 mt-0.5" /> : stage.temp === 0 ? <Snowflake size={12} style={{ color }} className="flex-shrink-0 mt-0.5" /> : null}
+          </div>
+          {lead.company_name && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{lead.company_name}</p>}
+        </div>
       </div>
-      <p className="text-xs text-gray-400 mt-0.5">{lead.company_name}</p>
+
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
+        <div className="flex flex-wrap gap-1 mt-2">
           {tags.map(tag => (
-            <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>
-              {tag}
-            </span>
+            <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>{tag}</span>
           ))}
         </div>
       )}
-      <div className="flex items-center justify-between mt-2">
+
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
         <span className="text-xs font-semibold pulso-mono" style={{ color }}>{formatBRL(lead.value)}</span>
-        <span className="text-[10px] text-gray-300 pulso-mono">{(lead.phone || "").replace(/@.*$/, "").slice(-9)}</span>
+        <div className="flex items-center gap-2">
+          {lead.created_at && <span className="text-[10px] text-gray-300 flex items-center gap-0.5"><Calendar size={9} />{formatDate(lead.created_at)}</span>}
+          {lead.phone && (
+            <button onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }} className="text-green-500 hover:text-green-600" title="Abrir conversa">
+              <MessageCircle size={13} />
+            </button>
+          )}
+        </div>
       </div>
+
       {lastMsg && (
-        <p className="text-[11px] text-gray-400 mt-2 italic truncate border-t border-gray-50 pt-2">
+        <p className="text-[11px] text-gray-400 mt-1.5 italic truncate">
           {lastMsg.from_type === "me" ? "Você: " : ""}{lastMsg.text}
         </p>
       )}
+    </div>
+  );
+}
+
+function Dashboard({ leads }) {
+  const PRIMARY = '#4F3CC9';
+  const SUCCESS = '#16A34A';
+  const DANGER = '#E11D48';
+
+  const total = leads.reduce((s, l) => s + Number(l.value || 0), 0);
+  const ganhos = leads.filter(l => l.stage === 'ganho');
+  const perdidos = leads.filter(l => l.stage === 'perdido');
+  const abertos = leads.filter(l => !['ganho','perdido'].includes(l.stage));
+  const totalGanho = ganhos.reduce((s, l) => s + Number(l.value || 0), 0);
+  const totalPerdido = perdidos.reduce((s, l) => s + Number(l.value || 0), 0);
+  const totalAberto = abertos.reduce((s, l) => s + Number(l.value || 0), 0);
+
+  // Daily leads chart — last 7 days
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return d;
+  });
+  const dayData = days.map(d => {
+    const ds = d.toISOString().slice(0, 10);
+    const count = leads.filter(l => l.created_at && l.created_at.slice(0, 10) === ds).length;
+    const value = leads.filter(l => l.created_at && l.created_at.slice(0, 10) === ds).reduce((s, l) => s + Number(l.value || 0), 0);
+    return { label: `${d.getDate()}/${d.getMonth() + 1}`, count, value };
+  });
+  const maxVal = Math.max(...dayData.map(d => d.value), 1);
+  const W = 480, H = 120, PAD = 10;
+  const pts = dayData.map((d, i) => ({
+    x: PAD + (i / (dayData.length - 1)) * (W - PAD * 2),
+    y: H - PAD - (d.value / maxVal) * (H - PAD * 2),
+  }));
+  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  const kpis = [
+    { label: 'Total criados', value: formatBRL(total), sub: `${leads.length} negócios`, color: PRIMARY, icon: <Activity size={20} style={{ color: PRIMARY }} /> },
+    { label: 'Total ganhos', value: formatBRL(totalGanho), sub: `${ganhos.length} negócios`, color: SUCCESS, icon: <TrendingUp size={20} style={{ color: SUCCESS }} /> },
+    { label: 'Total perdidos', value: formatBRL(totalPerdido), sub: `${perdidos.length} negócios`, color: DANGER, icon: <TrendingDown size={20} style={{ color: DANGER }} /> },
+    { label: 'Total em aberto', value: formatBRL(totalAberto), sub: `${abertos.length} negócios`, color: '#D97706', icon: <Activity size={20} style={{ color: '#D97706' }} /> },
+    { label: 'Total negócios', value: formatBRL(total), sub: `${leads.length} negócios`, color: '#2563EB', icon: <BarChart2 size={20} style={{ color: '#2563EB' }} /> },
+  ];
+
+  // Top leads por valor
+  const topLeads = [...leads].sort((a, b) => Number(b.value) - Number(a.value)).slice(0, 5);
+
+  return (
+    <div className="h-full overflow-y-auto pulso-scroll p-6" style={{ fontFamily: 'Inter, sans-serif' }}>
+      {/* KPI cards */}
+      <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        {kpis.map((k, i) => (
+          <div key={i} className="bg-white rounded-xl border border-black/5 p-4 flex items-start justify-between hover:shadow-sm transition-shadow" style={{ borderTop: `3px solid ${k.color}` }}>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">{k.label}</p>
+              <p className="text-xl font-bold mt-1" style={{ fontFamily: 'Sora, sans-serif', color: '#14171F' }}>{k.value}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>
+            </div>
+            {k.icon}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6" style={{ gridTemplateColumns: '1fr minmax(260px, 320px)' }}>
+        {/* Linha: Dados diários */}
+        <div className="bg-white rounded-xl border border-black/5 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="font-bold text-sm">Dados diários</p>
+              <p className="text-xs text-gray-400">Leads criados nos últimos 7 dias por valor</p>
+            </div>
+          </div>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 120 }}>
+            {/* Grid lines */}
+            {[0.25, 0.5, 0.75, 1].map(f => (
+              <line key={f} x1={PAD} y1={H - PAD - f * (H - PAD * 2)} x2={W - PAD} y2={H - PAD - f * (H - PAD * 2)} stroke="#F3F4F6" strokeWidth="1" />
+            ))}
+            {/* Filled area */}
+            <path
+              d={`${pathD} L${pts[pts.length-1].x},${H - PAD} L${pts[0].x},${H - PAD} Z`}
+              fill={PRIMARY + '18'}
+            />
+            {/* Line */}
+            <path d={pathD} fill="none" stroke={PRIMARY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Dots */}
+            {pts.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={PRIMARY} stroke="white" strokeWidth="1.5" />
+            ))}
+          </svg>
+          <div className="flex justify-between mt-1 px-2">
+            {dayData.map((d, i) => (
+              <span key={i} className="text-[10px] text-gray-400">{d.label}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Top leads por valor */}
+        <div className="bg-white rounded-xl border border-black/5 p-5">
+          <p className="font-bold text-sm mb-4">Top leads por valor</p>
+          {topLeads.length === 0 && <p className="text-sm text-gray-300 text-center py-8">Não há dados</p>}
+          {topLeads.map((l, i) => {
+            const color = stageColor(stageById(l.stage));
+            const pct = total > 0 ? (Number(l.value) / total) * 100 : 0;
+            return (
+              <div key={l.id} className="flex items-center gap-3 mb-3">
+                <span className="text-xs text-gray-400 w-4">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="text-xs font-semibold truncate">{l.name}</p>
+                    <p className="text-xs font-semibold pulso-mono ml-2 flex-shrink-0" style={{ color }}>{formatBRL(l.value)}</p>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
