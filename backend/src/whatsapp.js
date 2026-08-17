@@ -20,9 +20,15 @@ function restoreBuffers(obj) {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(restoreBuffers);
+  // Node.js Buffer serialized as { type: 'Buffer', data: [...] }
   if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data);
+  // Uint8Array serialized as plain numeric-keyed object { '0': x, '1': y, ... }
+  const keys = Object.keys(obj);
+  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+    return Buffer.from(keys.sort((a, b) => Number(a) - Number(b)).map(k => obj[k]));
+  }
   const result = {};
-  for (const key of Object.keys(obj)) result[key] = restoreBuffers(obj[key]);
+  for (const key of keys) result[key] = restoreBuffers(obj[key]);
   return result;
 }
 
@@ -228,20 +234,26 @@ async function connectWhatsApp(companyId) {
           try {
             const remoteJid = msg.key.remoteJid || '';
             if (remoteJid.endsWith('@g.us')) continue;
-            const phone = remoteJid.replace(/@[^@]+$/, ''); // strip any @suffix for DB matching
+            if (remoteJid.endsWith('@lid')) continue; // @lid sem phone real, ignorar
+            const phone = remoteJid.replace(/@[^@]+$/, '');
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
+            const msgId = msg.key.id;
+            // DB-level dedup: evita duplicar mensagens no restart do servidor
+            if (msgId) {
+              const dup = await pool.query('SELECT id FROM messages WHERE wa_msg_id=$1 LIMIT 1', [msgId]);
+              if (dup.rows.length) continue;
+            }
+            if (msgId && processedMsgIds.has(msgId)) continue;
+            if (msgId) processedMsgIds.add(msgId);
             const leadResult = await pool.query(
               'SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
               [companyId, `%${phone}%`]
             );
             if (leadResult.rows.length) {
-              const msgId = msg.key.id;
-              if (msgId && processedMsgIds.has(msgId)) continue;
-              if (msgId) processedMsgIds.add(msgId);
               await pool.query(
-                "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'me',$2)",
-                [leadResult.rows[0].id, text]
+                "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'me',$2,$3) ON CONFLICT (wa_msg_id) DO NOTHING",
+                [leadResult.rows[0].id, text, msgId || null]
               );
             }
           } catch (e) { console.error('[WA] fromMe handler error:', e.message); }
@@ -255,9 +267,18 @@ async function connectWhatsApp(companyId) {
         if (msgId) processedMsgIds.add(msgId);
         const remoteJid = msg.key.remoteJid || '';
         if (remoteJid.endsWith('@g.us')) continue; // ignore groups
-        const phone = remoteJid.endsWith('@s.whatsapp.net') ? remoteJid.replace('@s.whatsapp.net', '') : remoteJid;
+        if (remoteJid.endsWith('@lid')) continue; // @lid sem phone real resolvido ainda
+        const phone = remoteJid.replace('@s.whatsapp.net', '');
         if (!phone) continue;
-        const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+        // Extrair texto ou label de mídia
+        const text = msg.message?.conversation
+          || msg.message?.extendedTextMessage?.text
+          || (msg.message?.imageMessage ? '[Imagem]' : null)
+          || (msg.message?.audioMessage ? '[Áudio]' : null)
+          || (msg.message?.videoMessage ? '[Vídeo]' : null)
+          || (msg.message?.documentMessage ? `[Documento: ${msg.message.documentMessage.fileName || 'arquivo'}]` : null)
+          || (msg.message?.stickerMessage ? '[Sticker]' : null)
+          || '';
         if (!text) continue;
         try {
           // DB-level dedup: skip if this wa_msg_id was already saved
