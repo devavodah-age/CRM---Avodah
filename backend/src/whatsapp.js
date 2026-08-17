@@ -141,7 +141,7 @@ async function connectWhatsApp(companyId) {
     version = [2, 3000, 1015901307];
   }
 
-  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds };
+  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds, lidToPhone: new Map() };
   connections.set(companyId, conn);
 
   const logger = pino({ level: 'silent' });
@@ -223,23 +223,46 @@ async function connectWhatsApp(companyId) {
     });
 
     const processedMsgIds = new Set();
-    // When WhatsApp syncs contacts, resolve @lid -> real phone number in leads
+    // Extrai o número LID de um campo contact.lid (pode ser string, objeto ou null)
+    function extractLid(lid) {
+      if (!lid) return null;
+      if (typeof lid === 'string') return lid.replace(/@[^@]+$/, ''); // remove @lid sufixo
+      if (typeof lid === 'object' && lid.user) return String(lid.user);
+      return null;
+    }
+
+    // Processa um contato do evento contacts.upsert/update:
+    // mapeia LID -> telefone real e atualiza leads com telefone errado no banco
+    async function resolveContact(contact) {
+      if (!contact.id || !contact.id.endsWith('@s.whatsapp.net')) return;
+      const realPhone = contact.id.replace('@s.whatsapp.net', '');
+      if (!realPhone || realPhone.length < 8) return;
+      const lid = extractLid(contact.lid);
+      if (!lid) return;
+      // Armazena no mapa em memória
+      conn.lidToPhone.set(lid, realPhone);
+      conn.lidToPhone.set(lid.replace(/\D/g, ''), realPhone);
+      console.log(`[WA] LID mapeado: ${lid} → ${realPhone}`);
+      // Atualiza leads que estão com o número errado (LID como telefone)
+      try {
+        const { rowCount } = await pool.query(
+          `UPDATE leads SET phone=$1 WHERE company_id=$2
+           AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $3`,
+          [realPhone, companyId, lid.replace(/\D/g, '')]
+        );
+        if (rowCount > 0) console.log(`[WA] ${rowCount} lead(s) corrigidos: LID ${lid} → ${realPhone}`);
+      } catch (e) { console.error('[WA] resolveContact update error:', e.message); }
+    }
+
     socket.ev.on('contacts.upsert', async (contacts) => {
       for (const contact of contacts) {
-        try {
-          // contact.id = @s.whatsapp.net (real phone), contact.lid = @lid (opaque ID)
-          if (contact.id && contact.id.endsWith('@s.whatsapp.net') && contact.lid) {
-            const realPhone = contact.id.replace('@s.whatsapp.net', '');
-            const lidId = typeof contact.lid === 'string'
-              ? contact.lid.replace(/@[^@]+$/, '')
-              : String(contact.lid);
-            // Update leads that have the @lid ID as phone
-            await pool.query(
-              'UPDATE leads SET phone=$1 WHERE company_id=$2 AND (phone=$3 OR phone=$4)',
-              [realPhone, companyId, lidId, contact.lid]
-            );
-          }
-        } catch (e) { console.error('[WA] contacts.upsert update error:', e.message); }
+        await resolveContact(contact).catch(e => console.error('[WA] contacts.upsert error:', e.message));
+      }
+    });
+
+    socket.ev.on('contacts.update', async (updates) => {
+      for (const update of updates) {
+        await resolveContact(update).catch(e => console.error('[WA] contacts.update error:', e.message));
       }
     });
 
@@ -250,9 +273,11 @@ async function connectWhatsApp(companyId) {
         if (msg.key.fromMe) {
           try {
             const remoteJid = msg.key.remoteJid || '';
-            if (remoteJid.endsWith('@g.us')) continue;
-            if (remoteJid.endsWith('@lid')) continue; // @lid sem phone real, ignorar
-            const phone = remoteJid.replace(/@[^@]+$/, '');
+            // Aceita apenas JIDs de contato individual real
+            if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
+            const rawPhone = remoteJid.replace(/@[^@]+$/, '');
+            // Resolve LID → telefone real via mapa em memória
+            const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
             const msgId = msg.key.id;
@@ -292,9 +317,11 @@ async function connectWhatsApp(companyId) {
         if (msgId && processedMsgIds.has(msgId)) continue;
         if (msgId) processedMsgIds.add(msgId);
         const remoteJid = msg.key.remoteJid || '';
-        if (remoteJid.endsWith('@g.us')) continue; // ignore groups
-        if (remoteJid.endsWith('@lid')) continue; // @lid sem phone real resolvido ainda
-        const phone = remoteJid.replace('@s.whatsapp.net', '');
+        // Aceita apenas JIDs de contato individual (@s.whatsapp.net ou @c.us)
+        if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
+        const rawPhone = remoteJid.replace(/@[^@]+$/, '');
+        // Resolve LID → telefone real via mapa em memória
+        const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
         if (!phone) continue;
         // Extrair texto ou label de mídia
         const text = msg.message?.conversation

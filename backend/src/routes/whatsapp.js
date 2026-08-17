@@ -41,4 +41,30 @@ router.post('/send', async (req, res) => {
   }
 });
 
+// Retorna todos os leads com telefone suspeito (LID) para o frontend mostrar
+router.get('/suspicious-phones', async (req, res) => {
+  try {
+    // Números suspeitos: muito longos (>13 dígitos) ou começam com padrões de LID
+    // Números brasileiros reais: 12-13 dígitos com DDI 55
+    const { rows } = await pool.query(`
+      SELECT id, name, phone FROM leads
+      WHERE company_id = $1
+        AND phone IS NOT NULL
+        AND (
+          LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '', 'g')) > 13
+          OR LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '', 'g')) < 8
+          OR (
+            LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '', 'g')) BETWEEN 12 AND 15
+            AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') NOT LIKE '55%'
+            AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') NOT LIKE '1%'
+          )
+        )
+      ORDER BY id DESC
+    `, [req.companyId]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
