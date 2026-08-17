@@ -194,7 +194,14 @@ export default function PulsoCRM() {
     const pollId = setInterval(() => {
       fetch(`${API_URL}/leads`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
-        .then(data => { if (Array.isArray(data)) setLeads(data); })
+        .then(data => {
+          if (Array.isArray(data)) {
+            setLeads(prev => data.map(newLead => {
+              const existing = prev.find(l => l.id === newLead.id);
+              return { ...newLead, messages: existing?.messages || [] };
+            }));
+          }
+        })
         .catch(() => {});
     }, 20000);
     return () => clearInterval(pollId);
@@ -322,9 +329,6 @@ export default function PulsoCRM() {
       setLeads((prev) =>
         prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l))
       );
-      if (waStatus === 'open' && selectedLead?.phone) {
-        sendWhatsAppMessage(selectedLead.id, selectedLead.phone, text).catch(() => {});
-      }
     } catch (err) {
       addToast(`Não consegui enviar a mensagem: ${err.message}`);
     }

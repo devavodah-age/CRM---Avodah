@@ -90,6 +90,14 @@ async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS automation_jobs_pending_idx ON automation_jobs(run_at) WHERE status = 'pending';
   `).catch(() => {});
+  // Add attempts column for job retry tracking
+  await pool.query(`
+    ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+  `).catch(() => {});
+  // Index for company-scoped lead lookups
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS leads_company_id_idx ON leads(company_id);
+  `).catch(() => {});
   console.log('Banco inicializado.');
 }
 

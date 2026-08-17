@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { triggerAutomations } = require('../automationEngine');
+const { sendMessage, getStatus } = require('../whatsapp');
 
 const router = express.Router();
 
@@ -11,9 +12,15 @@ async function attachMessages(lead) {
 
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM leads WHERE company_id = $1 ORDER BY id DESC', [req.companyId]);
-    const leads = await Promise.all(result.rows.map(attachMessages));
-    res.json(leads);
+    const result = await pool.query(
+      `SELECT l.*,
+        (SELECT text FROM messages WHERE lead_id=l.id ORDER BY id DESC LIMIT 1) as last_message,
+        (SELECT COUNT(*) FROM messages WHERE lead_id=l.id)::int as message_count
+       FROM leads l WHERE l.company_id=$1 ORDER BY l.id DESC`,
+      [req.companyId]
+    );
+    // Return with empty messages array so frontend doesn't break
+    res.json(result.rows.map(l => ({ ...l, messages: [] })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });
@@ -113,9 +120,21 @@ router.post('/:id/messages', async (req, res) => {
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
     if (!text || !text.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
 
+    let waMessageId = null;
+    // Tenta enviar pelo WhatsApp se conectado e lead tem telefone
+    if (lead.phone && getStatus(req.companyId).status === 'open') {
+      try {
+        const waResult = await sendMessage(req.companyId, lead.phone, text.trim());
+        waMessageId = waResult?.key?.id || null;
+      } catch (e) {
+        // WhatsApp offline — salva normalmente, sem wa_msg_id
+      }
+    }
+
+    // Salvar com wa_msg_id previne duplicação quando fromMe handler receber de volta
     const result = await pool.query(
-      "INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'me', $2) RETURNING *",
-      [lead.id, text.trim()]
+      "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1, 'me', $2, $3) ON CONFLICT (wa_msg_id) DO UPDATE SET text=EXCLUDED.text RETURNING *",
+      [lead.id, text.trim(), waMessageId]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

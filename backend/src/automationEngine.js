@@ -1,6 +1,7 @@
 const pool = require('./db');
 
 let sendMessageFn = null;
+let isProcessing = false;
 
 function setWhatsAppSender(fn) {
   sendMessageFn = fn;
@@ -42,7 +43,7 @@ async function processJobs() {
     await client.query('BEGIN');
 
     const { rows: jobs } = await client.query(`
-      SELECT j.id, j.automation_id, j.company_id, j.lead_id, j.next_action_index,
+      SELECT j.id, j.automation_id, j.company_id, j.lead_id, j.next_action_index, j.attempts,
              a.name AS auto_name, a.actions
       FROM automation_jobs j
       JOIN automations a ON a.id = j.automation_id
@@ -161,16 +162,31 @@ async function executeJob(job) {
     console.log(`[AutoEngine] Job ${job.id} concluído — lead ${lead.id}`);
 
   } catch (e) {
-    console.error(`[AutoEngine] Job ${job.id} falhou:`, e.message);
-    await pool.query(`UPDATE automation_jobs SET status='failed' WHERE id=$1`, [job.id]);
+    console.error(`[AutoEngine] Job ${job.id} falhou (tentativa ${(job.attempts || 0) + 1}):`, e.message);
+    const attempts = (job.attempts || 0) + 1;
+    if (attempts < 3) {
+      // Retry em 5 minutos
+      await pool.query(
+        `UPDATE automation_jobs SET status='pending', attempts=$1, run_at=NOW() + INTERVAL '5 minutes' WHERE id=$2`,
+        [attempts, job.id]
+      );
+      console.log(`[AutoEngine] Job ${job.id} reagendado para daqui 5min (tentativa ${attempts}/3)`);
+    } else {
+      await pool.query(`UPDATE automation_jobs SET status='failed', attempts=$1 WHERE id=$2`, [attempts, job.id]);
+      console.log(`[AutoEngine] Job ${job.id} falhou definitivamente após 3 tentativas`);
+    }
   }
 }
 
 function startJobProcessor() {
-  // Run immediately on startup to resume any jobs that were pending before restart
-  processJobs();
-  // Then poll every 30 seconds
-  setInterval(processJobs, 30 * 1000);
+  const run = async () => {
+    if (isProcessing) return;
+    isProcessing = true;
+    try { await processJobs(); }
+    finally { isProcessing = false; }
+  };
+  run();
+  setInterval(run, 30 * 1000);
   console.log('[AutoEngine] Job processor iniciado (intervalo: 30s)');
 }
 

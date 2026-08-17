@@ -32,6 +32,22 @@ function restoreBuffers(obj) {
   return result;
 }
 
+// Normaliza phone para só dígitos
+function normalizePhone(phone) {
+  if (!phone) return null;
+  return phone.replace(/\D/g, '') || null;
+}
+
+// Retorna variantes do número para busca (com/sem DDI 55)
+function phoneVariants(phone) {
+  const d = normalizePhone(phone);
+  if (!d) return [];
+  const set = new Set([d]);
+  if (d.startsWith('55') && d.length >= 12) set.add(d.slice(2)); // sem DDI
+  if (!d.startsWith('55') && d.length >= 8)  set.add('55' + d); // com DDI
+  return [...set];
+}
+
 const connections = new Map();
 
 async function loadAuthState(companyId) {
@@ -246,9 +262,12 @@ async function connectWhatsApp(companyId) {
             }
             if (msgId && processedMsgIds.has(msgId)) continue;
             if (msgId) processedMsgIds.add(msgId);
+            const variants = phoneVariants(phone);
+            if (!variants.length) continue;
+            const placeholders = variants.map((_, i) => `REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $${i + 2}`).join(' OR ');
             const leadResult = await pool.query(
-              'SELECT id FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
-              [companyId, `%${phone}%`]
+              `SELECT id FROM leads WHERE company_id=$1 AND (${placeholders}) LIMIT 1`,
+              [companyId, ...variants]
             );
             if (leadResult.rows.length) {
               await pool.query(
@@ -259,8 +278,14 @@ async function connectWhatsApp(companyId) {
           } catch (e) { console.error('[WA] fromMe handler error:', e.message); }
           continue;
         }
-        // Only process incoming messages when type='notify'
-        if (type !== 'notify') continue;
+        // Recupera mensagens recentes perdidas durante redeploy (type='append')
+        if (type === 'append' && !msg.key.fromMe) {
+          const msgTime = msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : 0;
+          if (Date.now() - msgTime > 10 * 60 * 1000) continue; // ignora histórico antigo
+          // cai através e processa como notify
+        } else if (type !== 'notify') {
+          continue;
+        }
         const msgId = msg.key.id;
         // In-memory dedup for same session
         if (msgId && processedMsgIds.has(msgId)) continue;
@@ -286,35 +311,52 @@ async function connectWhatsApp(companyId) {
             const dup = await pool.query('SELECT id FROM messages WHERE wa_msg_id=$1 LIMIT 1', [msgId]);
             if (dup.rows.length) continue;
           }
-          let leadResult = await pool.query(
-            'SELECT id, name FROM leads WHERE company_id=$1 AND phone ILIKE $2 LIMIT 1',
-            [companyId, `%${phone}%`]
-          );
+          const variants = phoneVariants(phone);
+          if (!variants.length) continue;
+          const placeholders = variants.map((_, i) => `REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $${i + 2}`).join(' OR ');
           let leadId; let isNewLead = false;
-          if (leadResult.rows.length) {
-            leadId = leadResult.rows[0].id;
-          } else {
-            // Auto-create lead for unknown number
-            const name = msg.pushName || phone;
-            const newLead = await pool.query(
-              "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id, name",
-              [companyId, name, phone]
+          // Advisory lock por (company_id, phone) para evitar criação de leads duplicados
+          const lockKey = BigInt(companyId) * BigInt(1000000) + BigInt(parseInt(normalizePhone(phone)?.slice(-6) || '0', 10));
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey.toString()]);
+
+            let leadResult = await client.query(
+              `SELECT id, name FROM leads WHERE company_id=$1 AND (${placeholders}) LIMIT 1`,
+              [companyId, ...variants]
             );
-            leadId = newLead.rows[0].id;
-            isNewLead = true;
-            await pool.query(
-              "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
-              [leadId, `Lead criado automaticamente via WhatsApp`]
-            );
-            console.log('[WA] Auto-created lead for', phone);
-            // n8n webhook: new lead
-            if (process.env.N8N_WEBHOOK_URL) {
-              fetch(process.env.N8N_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ event: 'new_lead', leadId, name: newLead.rows[0].name, phone, companyId }),
-              }).catch(() => {});
+
+            if (!leadResult.rows.length) {
+              const name = msg.pushName || phone;
+              const newLead = await client.query(
+                "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id, name",
+                [companyId, name, phone]
+              );
+              leadId = newLead.rows[0].id;
+              isNewLead = true;
+              await client.query(
+                "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
+                [leadId, 'Lead criado automaticamente via WhatsApp']
+              );
+              console.log('[WA] Auto-created lead for', phone);
+              // n8n webhook: new lead
+              if (process.env.N8N_WEBHOOK_URL) {
+                fetch(process.env.N8N_WEBHOOK_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ event: 'new_lead', leadId, name: newLead.rows[0].name, phone, companyId }),
+                }).catch(() => {});
+              }
+            } else {
+              leadId = leadResult.rows[0].id;
             }
+            await client.query('COMMIT');
+          } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw e;
+          } finally {
+            client.release();
           }
           await pool.query(
             "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'lead',$2,$3)",
@@ -355,8 +397,9 @@ async function disconnectWhatsApp(companyId) {
 async function sendMessage(companyId, phone, text) {
   const conn = connections.get(companyId);
   if (!conn || conn.status !== 'open') throw new Error('WhatsApp não conectado');
-  const jid = phone.includes('@') ? phone : phone.replace(/\D/g, '') + '@s.whatsapp.net';
-  await conn.socket.sendMessage(jid, { text });
+  const jid = phone.includes('@') ? phone : normalizePhone(phone) + '@s.whatsapp.net';
+  const result = await conn.socket.sendMessage(jid, { text });
+  return result; // { key: { id, fromMe, remoteJid }, ... }
 }
 
 function getStatus(companyId) {
