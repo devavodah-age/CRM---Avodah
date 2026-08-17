@@ -488,6 +488,7 @@ export default function PulsoCRM() {
     contatos: ["Contatos", "Todos os leads e clientes em um só lugar"],
     automacoes: ["Automações", "Regras que disparam ações sozinhas"],
     whatsapp: ["WhatsApp", "Conecte e gerencie sua conta WhatsApp"],
+    configuracoes: ["Configurações", "Pixel, API de Conversões e outras integrações"],
   };
 
   const sharedStyle = `
