@@ -578,9 +578,6 @@ export default function PulsoCRM() {
           <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={19} />} title="Configurações" />
         </nav>
         <div className="mt-auto flex flex-col gap-4 items-center">
-          <button title="Configurações" className="text-white/50 hover:text-white/90 transition-colors">
-            <Settings size={19} />
-          </button>
           <button title="Sair" onClick={logout} className="text-white/50 hover:text-white/90 transition-colors">
             <LogOut size={17} />
           </button>
