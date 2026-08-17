@@ -69,10 +69,26 @@ async function initDb() {
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_nodes JSONB DEFAULT '[]';
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_edges JSONB DEFAULT '[]';
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS wa_msg_id TEXT;
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_nodes JSONB DEFAULT '[]';
+    ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_edges JSONB DEFAULT '[]';
   `).catch(() => {});
   // Unique index for wa_msg_id deduplication
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS messages_wa_msg_id_idx ON messages(wa_msg_id) WHERE wa_msg_id IS NOT NULL;
+  `).catch(() => {});
+  // Job queue for automations (survives Railway restarts)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_jobs (
+      id SERIAL PRIMARY KEY,
+      automation_id INTEGER REFERENCES automations(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id),
+      lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+      next_action_index INTEGER NOT NULL DEFAULT 0,
+      run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS automation_jobs_pending_idx ON automation_jobs(run_at) WHERE status = 'pending';
   `).catch(() => {});
   console.log('Banco inicializado.');
 }
