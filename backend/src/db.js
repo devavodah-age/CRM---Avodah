@@ -104,6 +104,20 @@ async function initDb() {
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS capi_token TEXT;
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS capi_token_set BOOLEAN NOT NULL DEFAULT FALSE;
   `).catch(() => {});
+  // Tags on leads
+  await pool.query(`
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+  `).catch(() => {});
+  // Message templates per company
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS message_templates (
+      id SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id),
+      name TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `).catch(() => {});
   console.log('Banco inicializado.');
 }
 

@@ -2,6 +2,7 @@ const pool = require('./db');
 
 let sendMessageFn = null;
 let isProcessing = false;
+let noResponseTickCount = 0; // fires every ~1h (120 × 30s intervals)
 
 function setWhatsAppSender(fn) {
   sendMessageFn = fn;
@@ -178,13 +179,65 @@ async function executeJob(job) {
   }
 }
 
+// Verifica automações do tipo no_response: leads sem resposta do lead em X dias.
+// Roda a cada ~1h para não sobrecarregar o banco.
+async function checkNoResponseTriggers() {
+  try {
+    const { rows: automations } = await pool.query(
+      `SELECT * FROM automations WHERE enabled=TRUE AND trigger_type='no_response'`
+    );
+    for (const automation of automations) {
+      const days = Math.max(1, Number(automation.trigger_config?.days) || 3);
+      const actions = Array.isArray(automation.actions) ? automation.actions : [];
+      if (actions.length === 0) continue;
+
+      const { rows: leads } = await pool.query(`
+        SELECT l.id FROM leads l
+        WHERE l.company_id = $1
+          AND EXISTS (
+            SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.from_type = 'lead'
+          )
+          AND (
+            SELECT MAX(m.created_at) FROM messages m
+            WHERE m.lead_id = l.id AND m.from_type = 'lead'
+          ) < NOW() - ($2 * INTERVAL '1 day')
+          AND NOT EXISTS (
+            SELECT 1 FROM automation_jobs j
+            WHERE j.automation_id = $3
+              AND j.lead_id = l.id
+              AND j.created_at > NOW() - ($2 * INTERVAL '1 day')
+          )
+      `, [automation.company_id, days, automation.id]);
+
+      for (const lead of leads) {
+        await pool.query(
+          `INSERT INTO automation_jobs (automation_id, company_id, lead_id, next_action_index, run_at, status)
+           VALUES ($1,$2,$3,0,NOW(),'pending')`,
+          [automation.id, automation.company_id, lead.id]
+        );
+        console.log(`[AutoEngine] no_response job criado — automação "${automation.name}" lead ${lead.id}`);
+      }
+    }
+  } catch (e) {
+    console.error('[AutoEngine] checkNoResponseTriggers error:', e.message);
+  }
+}
+
 function startJobProcessor() {
   const run = async () => {
     if (isProcessing) return;
     isProcessing = true;
-    try { await processJobs(); }
-    finally { isProcessing = false; }
+    try {
+      await processJobs();
+      noResponseTickCount++;
+      if (noResponseTickCount >= 120) {
+        noResponseTickCount = 0;
+        await checkNoResponseTriggers();
+      }
+    } finally { isProcessing = false; }
   };
+  // Run no_response check immediately on startup too
+  checkNoResponseTriggers().catch(console.error);
   run();
   setInterval(run, 30 * 1000);
   console.log('[AutoEngine] Job processor iniciado (intervalo: 30s)');

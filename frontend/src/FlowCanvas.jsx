@@ -24,6 +24,7 @@ const TYPE_META = {
   trigger_new_lead:          { color: '#238636', label: 'Novo Lead',           icon: <Zap size={13} /> },
   trigger_stage_changed:     { color: '#238636', label: 'Muda de Etapa',       icon: <Zap size={13} /> },
   trigger_message_received:  { color: '#238636', label: 'Mensagem Recebida',   icon: <Zap size={13} /> },
+  trigger_no_response:       { color: '#DC2626', label: 'Sem Resposta',        icon: <Clock size={13} /> },
   wait:                      { color: '#D29922', label: 'Aguardar',            icon: <Clock size={13} /> },
   send_whatsapp:             { color: '#2EA043', label: 'Enviar WhatsApp',     icon: <MessageCircle size={13} /> },
   move_stage:                { color: '#1F6FEB', label: 'Mover Etapa',         icon: <ArrowRight size={13} /> },
@@ -103,10 +104,15 @@ function NodeShell({ id, accentColor, title, icon, children, data }) {
 function TriggerNode({ id, data }) {
   const meta = TYPE_META[data.nodeType] || TYPE_META['trigger_new_lead'];
   const [stage, setStage] = useState(data.stage || '');
+  const [days, setDays] = useState(data.days || 3);
 
-  function onChange(val) {
+  function onStageChange(val) {
     setStage(val);
     if (data.onChange) data.onChange(id, { stage: val });
+  }
+  function onDaysChange(val) {
+    setDays(val);
+    if (data.onChange) data.onChange(id, { days: val });
   }
 
   return (
@@ -115,15 +121,24 @@ function TriggerNode({ id, data }) {
       {data.nodeType === 'trigger_stage_changed' && (
         <div style={{ marginTop: 6 }}>
           <label style={{ fontSize: 10, color: TEXT_SEC, display: 'block', marginBottom: 2 }}>Etapa alvo</label>
-          <select
-            value={stage}
-            onChange={e => onChange(e.target.value)}
-            style={inputStyle}
-            className="nodrag"
-          >
+          <select value={stage} onChange={e => onStageChange(e.target.value)} style={inputStyle} className="nodrag">
             <option value="">Qualquer etapa</option>
             {STAGES_LIST.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+        </div>
+      )}
+      {data.nodeType === 'trigger_no_response' && (
+        <div style={{ marginTop: 6 }}>
+          <label style={{ fontSize: 10, color: TEXT_SEC, display: 'block', marginBottom: 2 }}>Dias sem resposta do lead</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="number" min={1} value={days}
+              onChange={e => onDaysChange(Number(e.target.value))}
+              style={{ ...inputStyle, width: 56 }}
+              className="nodrag"
+            />
+            <span style={{ color: TEXT_SEC, fontSize: 11 }}>dias</span>
+          </div>
         </div>
       )}
     </NodeShell>
@@ -244,6 +259,7 @@ const nodeTypes = {
   trigger_new_lead:         TriggerNode,
   trigger_stage_changed:    TriggerNode,
   trigger_message_received: TriggerNode,
+  trigger_no_response:      TriggerNode,
   wait:                     WaitNode,
   send_whatsapp:            SendWhatsAppNode,
   move_stage:               MoveStageNode,
@@ -258,6 +274,7 @@ const PALETTE_SECTIONS = [
       { nodeType: 'trigger_new_lead',         label: 'Novo Lead',         defaultData: { nodeType: 'trigger_new_lead', label: 'Novo Lead', stage: '' } },
       { nodeType: 'trigger_stage_changed',    label: 'Muda de Etapa',    defaultData: { nodeType: 'trigger_stage_changed', label: 'Muda de Etapa', stage: '' } },
       { nodeType: 'trigger_message_received', label: 'Mensagem Recebida', defaultData: { nodeType: 'trigger_message_received', label: 'Mensagem Recebida', stage: '' } },
+      { nodeType: 'trigger_no_response',      label: 'Sem Resposta',      defaultData: { nodeType: 'trigger_no_response', label: 'Sem Resposta', days: 3 } },
     ],
   },
   {
@@ -394,7 +411,7 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
 
     onSave({
       trigger_type: triggerNode.type.replace('trigger_', ''),
-      trigger_config: { stage: triggerNode.data.stage || '' },
+      trigger_config: { stage: triggerNode.data.stage || '', days: triggerNode.data.days || 3 },
       actions,
       nodes: cleanNodes,
       edges,

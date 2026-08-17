@@ -72,21 +72,46 @@ router.patch('/:id', async (req, res) => {
     const leadResult = await pool.query('SELECT * FROM leads WHERE id=$1 AND company_id=$2', [req.params.id, req.companyId]);
     const lead = leadResult.rows[0];
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
-    const { name, company_name, phone, value } = req.body;
+    const { name, company_name, phone, value, tags } = req.body;
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+    if (name !== undefined) { setClauses.push(`name = $${idx++}`); params.push(name); }
+    if (company_name !== undefined) { setClauses.push(`company_name = $${idx++}`); params.push(company_name); }
+    if (phone !== undefined) { setClauses.push(`phone = $${idx++}`); params.push(phone); }
+    if (value !== undefined) { setClauses.push(`value = $${idx++}`); params.push(value); }
+    if (tags !== undefined) { setClauses.push(`tags = $${idx++}`); params.push(tags); }
+    if (setClauses.length === 0) return res.json(await attachMessages(lead));
+    params.push(lead.id);
     const updated = await pool.query(
-      `UPDATE leads SET
-        name = COALESCE($1, name),
-        company_name = COALESCE($2, company_name),
-        phone = COALESCE($3, phone),
-        value = COALESCE($4, value)
-       WHERE id=$5 RETURNING *`,
-      [name || null, company_name !== undefined ? company_name : null, phone || null, value !== undefined ? value : null, lead.id]
+      `UPDATE leads SET ${setClauses.join(', ')} WHERE id=$${idx} RETURNING *`,
+      params
     );
     res.json(await attachMessages(updated.rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });
   }
+});
+
+router.post('/import', async (req, res) => {
+  const { leads: leadsData } = req.body;
+  if (!Array.isArray(leadsData) || leadsData.length === 0) {
+    return res.status(400).json({ error: 'Nenhum lead para importar.' });
+  }
+  let imported = 0;
+  for (const row of leadsData) {
+    if (!row.name || !row.name.trim()) continue;
+    try {
+      const result = await pool.query(
+        "INSERT INTO leads (company_id, name, company_name, phone, value, stage) VALUES ($1,$2,$3,$4,$5,'novo') RETURNING id",
+        [req.companyId, row.name.trim(), row.company_name || null, row.phone || null, Number(row.value) || 0]
+      );
+      await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system','Lead importado via CSV')", [result.rows[0].id]);
+      imported++;
+    } catch (e) { /* skip row on error */ }
+  }
+  res.status(201).json({ imported });
 });
 
 router.delete('/:id', async (req, res) => {

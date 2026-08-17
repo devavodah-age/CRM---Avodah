@@ -134,6 +134,17 @@ export default function PulsoCRM() {
   const [settingsForm, setSettingsForm] = useState({ pixel_id: '', capi_token: '' });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
+  // Templates de mensagem
+  const [templates, setTemplates] = useState([]);
+  const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: '', text: '' });
+  const [templateSaving, setTemplateSaving] = useState(false);
+
+  // CSV Import
+  const csvInputRef = useRef(null);
+  const [importPreview, setImportPreview] = useState(null); // { rows: [], fileName }
+  const [importing, setImporting] = useState(false);
+
   const idRef = useRef(1);
   const nextId = () => {
     idRef.current += 1;
@@ -214,6 +225,11 @@ export default function PulsoCRM() {
         setSettingsForm({ pixel_id: data.pixel_id || '', capi_token: '' });
         if (data.pixel_id) loadFbPixel(data.pixel_id);
       })
+      .catch(() => {});
+    // Carregar templates de mensagem
+    fetch(`${API_URL}/templates`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setTemplates(data); })
       .catch(() => {});
     // Poll for new leads every 20s (so WhatsApp-created leads appear automatically)
     const pollId = setInterval(() => {
@@ -466,6 +482,75 @@ export default function PulsoCRM() {
     }
   }
 
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+      return obj;
+    }).filter(r => r.name);
+  }
+
+  function handleCSVFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const rows = parseCSV(ev.target.result);
+      setImportPreview({ rows, fileName: file.name });
+    };
+    reader.readAsText(file, 'UTF-8');
+    e.target.value = '';
+  }
+
+  async function confirmImport() {
+    if (!importPreview) return;
+    setImporting(true);
+    try {
+      const data = await apiFetch('/leads/import', {
+        method: 'POST',
+        body: JSON.stringify({ leads: importPreview.rows }),
+      });
+      addToast(`${data.imported} leads importados com sucesso!`);
+      setImportPreview(null);
+      await loadData();
+    } catch (err) {
+      addToast(`Erro na importação: ${err.message}`);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function saveTemplate() {
+    if (!templateForm.name.trim() || !templateForm.text.trim()) return;
+    setTemplateSaving(true);
+    try {
+      const created = await apiFetch('/templates', {
+        method: 'POST',
+        body: JSON.stringify({ name: templateForm.name, text: templateForm.text }),
+      });
+      setTemplates(prev => [...prev, created]);
+      setTemplateForm({ name: '', text: '' });
+      addToast('Template salvo!');
+    } catch (err) {
+      addToast(`Erro: ${err.message}`);
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
+  async function deleteTemplate(id) {
+    try {
+      await apiFetch(`/templates/${id}`, { method: 'DELETE' });
+      setTemplates(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      addToast(`Erro: ${err.message}`);
+    }
+  }
+
   function openNewAutomation() {
     setEditingAuto(null);
     setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [] });
@@ -596,7 +681,7 @@ export default function PulsoCRM() {
             <p className="text-xs text-gray-400">{titles[view][1]}</p>
           </div>
           <div className="flex items-center gap-3">
-            {view !== "automacoes" && (
+            {view !== "automacoes" && view !== "configuracoes" && (
               <div className="relative">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -607,11 +692,18 @@ export default function PulsoCRM() {
                 />
               </div>
             )}
-            {view !== "automacoes" ? (
-              <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
-                <Plus size={15} /> Novo Lead
-              </button>
-            ) : (
+            {(view === "pipeline" || view === "contatos") && (
+              <>
+                <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
+                <button onClick={() => csvInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  Importar CSV
+                </button>
+                <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
+                  <Plus size={15} /> Novo Lead
+                </button>
+              </>
+            )}
+            {view === "automacoes" && (
               <button onClick={openNewAutomation} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
                 <Plus size={15} /> Nova Automação
               </button>
@@ -852,6 +944,50 @@ export default function PulsoCRM() {
                   ✓ Pixel <strong>{settings.pixel_id}</strong> ativo — eventos <code>Lead</code> sendo disparados ao criar contatos.
                 </div>
               )}
+
+              {/* Templates de mensagem */}
+              <div style={{ marginTop: 32 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: INK }}>Templates de Mensagem</h3>
+                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>Respostas rápidas disponíveis no chat de cada lead.</p>
+
+                <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {templates.map(t => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 2 }}>{t.name}</p>
+                        <p style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
+                      </div>
+                      <button onClick={() => deleteTemplate(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: 0, flexShrink: 0 }} title="Excluir">
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  {templates.length === 0 && <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>Nenhum template ainda.</p>}
+
+                  <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input
+                      placeholder="Nome do template (ex: Boas-vindas)"
+                      value={templateForm.name}
+                      onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))}
+                      style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none' }}
+                    />
+                    <textarea
+                      placeholder="Texto da mensagem... use {nome}, {empresa}"
+                      value={templateForm.text}
+                      onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))}
+                      rows={3}
+                      style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }}
+                    />
+                    <button
+                      onClick={saveTemplate}
+                      disabled={templateSaving || !templateForm.name || !templateForm.text}
+                      style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (templateSaving || !templateForm.name || !templateForm.text) ? 0.6 : 1, alignSelf: 'flex-start' }}
+                    >
+                      {templateSaving ? 'Salvando...' : '+ Adicionar template'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -942,6 +1078,20 @@ export default function PulsoCRM() {
               <MessageCircle size={12} /> WhatsApp
             </div>
 
+            {/* Tags */}
+            <div className="px-4 py-2 border-b border-black/5 flex flex-wrap items-center gap-1.5">
+              {(selectedLead.tags || []).map(tag => (
+                <span key={tag} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: PRIMARY + '22', color: PRIMARY }}>
+                  {tag}
+                  <button onClick={() => updateLead(selectedLead.id, { tags: (selectedLead.tags || []).filter(t => t !== tag) })} className="hover:text-red-500 leading-none">×</button>
+                </span>
+              ))}
+              <TagInput onAdd={tag => {
+                const current = selectedLead.tags || [];
+                if (!current.includes(tag)) updateLead(selectedLead.id, { tags: [...current, tag] });
+              }} />
+            </div>
+
             <div className="flex-1 overflow-y-auto pulso-scroll p-4 space-y-3 bg-[#F5F6FA]">
               {selectedLead.messages.map((m) => {
                 if (m.from_type === "system") {
@@ -961,6 +1111,32 @@ export default function PulsoCRM() {
                 );
               })}
             </div>
+
+            {/* Templates dropdown */}
+            {templates.length > 0 && (
+              <div className="px-3 pt-2 relative">
+                <button
+                  onClick={() => setShowTemplatesDropdown(v => !v)}
+                  className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1"
+                >
+                  📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
+                </button>
+                {showTemplatesDropdown && (
+                  <div className="absolute bottom-8 left-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-72 max-h-48 overflow-y-auto">
+                    {templates.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      >
+                        <p className="text-xs font-semibold text-gray-700">{t.name}</p>
+                        <p className="text-xs text-gray-400 truncate">{t.text}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="p-3 border-t border-black/5 flex items-center gap-2">
               <input
@@ -995,6 +1171,31 @@ export default function PulsoCRM() {
           </Field>
           <button onClick={addLead} className="w-full mt-2 py-2.5 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
             Criar lead
+          </button>
+        </Modal>
+      )}
+
+      {/* Modal de preview CSV */}
+      {importPreview && (
+        <Modal onClose={() => setImportPreview(null)} title={`Importar CSV — ${importPreview.fileName}`}>
+          <p className="text-sm text-gray-500">{importPreview.rows.length} leads encontrados. Colunas aceitas: <span className="font-mono text-xs">name, company_name, phone, value</span></p>
+          <div className="max-h-40 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+            {importPreview.rows.slice(0, 8).map((r, i) => (
+              <div key={i} className="px-3 py-1.5 text-xs text-gray-700 flex gap-3">
+                <span className="font-semibold w-32 truncate">{r.name}</span>
+                <span className="text-gray-400 truncate">{r.phone}</span>
+              </div>
+            ))}
+            {importPreview.rows.length > 8 && <p className="px-3 py-1.5 text-xs text-gray-400">... e mais {importPreview.rows.length - 8}</p>}
+          </div>
+          <button
+            onClick={confirmImport}
+            disabled={importing}
+            className="w-full mt-2 py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2"
+            style={{ backgroundColor: PRIMARY, opacity: importing ? 0.7 : 1 }}
+          >
+            {importing && <Loader2 size={14} className="animate-spin" />}
+            {importing ? 'Importando...' : `Importar ${importPreview.rows.length} leads`}
           </button>
         </Modal>
       )}
@@ -1058,6 +1259,7 @@ function SideBtn({ active, onClick, icon, title }) {
 
 function LeadCard({ lead, color, stage, onDragStart, onClick }) {
   const lastMsg = lead.messages[lead.messages.length - 1];
+  const tags = lead.tags || [];
   return (
     <div draggable onDragStart={(e) => onDragStart(e, lead.id)} onClick={onClick} className="bg-white rounded-lg shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${color}` }}>
       <div className="flex items-start justify-between">
@@ -1065,6 +1267,15 @@ function LeadCard({ lead, color, stage, onDragStart, onClick }) {
         {stage.temp === 1 ? <Flame size={13} style={{ color }} /> : stage.temp === 0 ? <Snowflake size={13} style={{ color }} /> : null}
       </div>
       <p className="text-xs text-gray-400 mt-0.5">{lead.company_name}</p>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {tags.map(tag => (
+            <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs font-semibold pulso-mono" style={{ color }}>{formatBRL(lead.value)}</span>
         <span className="text-[10px] text-gray-300 pulso-mono">{(lead.phone || "").replace(/@.*$/, "").slice(-9)}</span>
@@ -1075,6 +1286,33 @@ function LeadCard({ lead, color, stage, onDragStart, onClick }) {
         </p>
       )}
     </div>
+  );
+}
+
+function TagInput({ onAdd }) {
+  const [value, setValue] = useState('');
+  const [active, setActive] = useState(false);
+  function submit() {
+    const tag = value.trim();
+    if (tag) { onAdd(tag); setValue(''); setActive(false); }
+  }
+  if (!active) {
+    return (
+      <button onClick={() => setActive(true)} className="text-[10px] text-gray-300 hover:text-gray-500 border border-dashed border-gray-200 rounded-full px-2 py-0.5">
+        + tag
+      </button>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setValue(''); setActive(false); } }}
+      onBlur={() => { submit(); }}
+      placeholder="nova tag"
+      className="text-[11px] border border-gray-300 rounded-full px-2 py-0.5 outline-none focus:border-[#4F3CC9] w-20"
+    />
   );
 }
 
@@ -1108,6 +1346,7 @@ const TRIGGER_TYPES = [
   { id: 'new_lead', label: 'Novo lead criado', icon: '🆕', color: '#16A34A', bg: '#F0FDF4' },
   { id: 'stage_changed', label: 'Lead muda de etapa', icon: '📊', color: '#2563EB', bg: '#EFF6FF' },
   { id: 'message_received', label: 'Mensagem recebida', icon: '💬', color: '#7C3AED', bg: '#F5F3FF' },
+  { id: 'no_response', label: 'Sem resposta', icon: '⏰', color: '#DC2626', bg: '#FEF2F2' },
 ];
 
 const ACTION_TYPES = [
