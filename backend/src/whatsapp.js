@@ -215,9 +215,15 @@ async function connectWhatsApp(companyId) {
         }
 
         if (code !== DisconnectReason.loggedOut && code !== 401) {
-          const delay = 8000;
-          console.log('[WA] Will retry in', delay, 'ms');
-          setTimeout(() => connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message)), delay);
+          const attempt = (conn._reconnectAttempt || 0) + 1;
+          const delay = Math.min(8000 * Math.pow(2, attempt - 1), 120000); // 8s, 16s, 32s... max 2min
+          console.log('[WA] Will retry in', delay, 'ms (attempt', attempt, ')');
+          setTimeout(() => {
+            const c = connections.get(companyId) || {};
+            c._reconnectAttempt = attempt;
+            connections.set(companyId, c);
+            connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message));
+          }, delay);
         }
       }
     });
@@ -388,7 +394,7 @@ async function connectWhatsApp(companyId) {
             client.release();
           }
           await pool.query(
-            "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'lead',$2,$3)",
+            "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'lead',$2,$3) ON CONFLICT (wa_msg_id) DO NOTHING",
             [leadId, text, msgId || null]
           );
           // n8n webhook: message received

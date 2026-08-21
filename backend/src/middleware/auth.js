@@ -6,7 +6,11 @@
 
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "troque-essa-chave-em-producao";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET env var não definida. Encerrando servidor.');
+  process.exit(1);
+}
 
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
