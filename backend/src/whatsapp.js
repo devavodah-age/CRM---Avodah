@@ -161,6 +161,14 @@ async function connectWhatsApp(companyId) {
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
       retryRequestDelayMs: 2000,
+      // Necessário para Baileys reprocessar mensagens com retry sem Bad MAC
+      getMessage: async (key) => {
+        try {
+          const res = await pool.query('SELECT text FROM messages WHERE wa_msg_id=$1 LIMIT 1', [key?.id]);
+          if (res.rows[0]) return { conversation: res.rows[0].text };
+        } catch {}
+        return { conversation: undefined };
+      },
     });
 
     conn.socket = socket;
