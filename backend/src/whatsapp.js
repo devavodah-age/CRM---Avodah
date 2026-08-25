@@ -281,7 +281,8 @@ async function connectWhatsApp(companyId) {
             const remoteJid = msg.key.remoteJid || '';
             // Aceita apenas JIDs de contato individual real
             if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
-            const rawPhone = remoteJid.replace(/@[^@]+$/, '');
+            // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
+            const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
             // Resolve LID → telefone real via mapa em memória
             const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -325,7 +326,8 @@ async function connectWhatsApp(companyId) {
         const remoteJid = msg.key.remoteJid || '';
         // Aceita apenas JIDs de contato individual (@s.whatsapp.net ou @c.us)
         if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
-        const rawPhone = remoteJid.replace(/@[^@]+$/, '');
+        // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
+        const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
         // Resolve LID → telefone real via mapa em memória
         const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
         if (!phone) continue;
