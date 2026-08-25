@@ -19,9 +19,12 @@ router.post('/signup', async (req, res) => {
     const companyResult = await pool.query('INSERT INTO companies (name) VALUES ($1) RETURNING id', [companyName]);
     const companyId = companyResult.rows[0].id;
     const passwordHash = bcrypt.hashSync(password, 10);
+    // Primeira conta do sistema vira admin automaticamente
+    const totalUsers = await pool.query('SELECT COUNT(*) FROM users');
+    const role = parseInt(totalUsers.rows[0].count) === 0 ? 'admin' : 'user';
     const userResult = await pool.query(
-      'INSERT INTO users (company_id, name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
-      [companyId, userName, email, passwordHash]
+      'INSERT INTO users (company_id, name, email, password_hash, role) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [companyId, userName, email, passwordHash, role]
     );
     await pool.query(
       'INSERT INTO automations (company_id, name, trigger_stage, action_text, enabled) VALUES ($1, $2, $3, $4, TRUE)',
@@ -31,8 +34,9 @@ router.post('/signup', async (req, res) => {
       'INSERT INTO automations (company_id, name, trigger_stage, action_text, enabled) VALUES ($1, $2, $3, $4, TRUE)',
       [companyId, 'Lembrete de proposta', 'proposta', 'Perguntar se o lead recebeu a proposta']
     );
-    const token = jwt.sign({ companyId, userId: userResult.rows[0].id, isAdmin: false }, JWT_SECRET, { expiresIn: '30d' });
-    res.status(201).json({ token, company: { id: companyId, name: companyName } });
+    const isAdmin = role === 'admin';
+    const token = jwt.sign({ companyId, userId: userResult.rows[0].id, isAdmin }, JWT_SECRET, { expiresIn: '30d' });
+    res.status(201).json({ token, company: { id: companyId, name: companyName }, isAdmin });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });
