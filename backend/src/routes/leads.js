@@ -158,9 +158,11 @@ router.post('/:id/messages', async (req, res) => {
       }
     }
 
-    // Salvar com wa_msg_id previne duplicação quando fromMe handler receber de volta
+    // Salvar com wa_msg_id previne duplicação quando fromMe handler receber de volta.
+    // ON CONFLICT precisa replicar o WHERE do índice parcial (wa_msg_id IS NOT NULL)
+    // senão PostgreSQL não consegue fazer match e lança erro quando waMessageId=null.
     const result = await pool.query(
-      "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1, 'me', $2, $3) ON CONFLICT (wa_msg_id) DO UPDATE SET text=EXCLUDED.text RETURNING *",
+      "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1, 'me', $2, $3) ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO UPDATE SET text=EXCLUDED.text RETURNING *",
       [lead.id, text.trim(), waMessageId]
     );
     res.status(201).json(result.rows[0]);
