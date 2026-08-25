@@ -31,7 +31,7 @@ router.post('/signup', async (req, res) => {
       'INSERT INTO automations (company_id, name, trigger_stage, action_text, enabled) VALUES ($1, $2, $3, $4, TRUE)',
       [companyId, 'Lembrete de proposta', 'proposta', 'Perguntar se o lead recebeu a proposta']
     );
-    const token = jwt.sign({ companyId, userId: userResult.rows[0].id }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ companyId, userId: userResult.rows[0].id, isAdmin: false }, JWT_SECRET, { expiresIn: '30d' });
     res.status(201).json({ token, company: { id: companyId, name: companyName } });
   } catch (err) {
     console.error(err);
@@ -52,8 +52,9 @@ router.post('/login', async (req, res) => {
     }
     const companyResult = await pool.query('SELECT * FROM companies WHERE id = $1', [user.company_id]);
     const company = companyResult.rows[0];
-    const token = jwt.sign({ companyId: user.company_id, userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, company: { id: company.id, name: company.name } });
+    const isAdmin = user.role === 'admin';
+    const token = jwt.sign({ companyId: user.company_id, userId: user.id, isAdmin }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, company: { id: company.id, name: company.name }, isAdmin });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });

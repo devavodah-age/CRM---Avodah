@@ -24,6 +24,7 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     req.companyId = payload.companyId;
     req.userId = payload.userId;
+    req.isAdmin = payload.isAdmin === true;
     next();
   } catch (err) {
     return res.status(401).json({ error: "Token inválido ou expirado." });

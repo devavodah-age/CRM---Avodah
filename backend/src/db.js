@@ -118,6 +118,10 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `).catch(() => {});
+  // Role de usuário: 'admin' gerencia todas as empresas, 'user' só vê a própria
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+  `).catch(() => {});
   console.log('Banco inicializado.');
 }
 
