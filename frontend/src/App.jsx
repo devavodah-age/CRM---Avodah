@@ -30,6 +30,7 @@ import {
   Calendar,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
+import AdminPanel from "./AdminPanel";
 
 // URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
 // Quando você hospedar o backend de verdade (Railway, Render, etc.), troque
@@ -111,14 +112,17 @@ export default function PulsoCRM() {
   // do Claude. Numa hospedagem de verdade, dá pra guardar em cookie seguro.
   const [token, setToken] = useState(null);
   const [company, setCompany] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   // Restore session from localStorage on page reload
   useEffect(() => {
     const savedToken = localStorage.getItem('pulso_token');
     const savedCompany = localStorage.getItem('pulso_company');
+    const savedIsAdmin = localStorage.getItem('pulso_is_admin') === 'true';
     if (savedToken && savedCompany) {
       try {
         setToken(savedToken);
         setCompany(JSON.parse(savedCompany));
+        setIsAdmin(savedIsAdmin);
       } catch {}
     }
   }, []);
@@ -335,8 +339,10 @@ export default function PulsoCRM() {
       if (!res.ok) throw new Error(data.error || "Não foi possível entrar");
       setToken(data.token);
       setCompany(data.company);
+      setIsAdmin(data.isAdmin === true);
       localStorage.setItem('pulso_token', data.token);
       localStorage.setItem('pulso_company', JSON.stringify(data.company));
+      localStorage.setItem('pulso_is_admin', data.isAdmin === true ? 'true' : 'false');
     } catch (err) {
       setAuthError(
         err.message === "Failed to fetch"
@@ -356,6 +362,8 @@ export default function PulsoCRM() {
     setSelectedLeadId(null);
     localStorage.removeItem('pulso_token');
     localStorage.removeItem('pulso_company');
+    localStorage.removeItem('pulso_is_admin');
+    setIsAdmin(false);
   }
 
   async function moveLead(leadId, stageId) {
@@ -696,6 +704,9 @@ export default function PulsoCRM() {
           <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={19} />} title="Conversas" />
           <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={19} />} title="WhatsApp" />
           <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={19} />} title="Configurações" />
+          {isAdmin && (
+            <SideBtn active={view === "clientes"} onClick={() => setView("clientes")} icon={<Building2 size={19} />} title="Clientes (Admin)" />
+          )}
         </nav>
         <div className="mt-auto flex flex-col gap-4 items-center">
           <button title="Sair" onClick={logout} className="text-white/50 hover:text-white/90 transition-colors">
@@ -1458,6 +1469,23 @@ export default function PulsoCRM() {
             }
           }}
           onClose={() => setFlowEditorOpen(false)}
+        />
+      )}
+
+      {/* Admin: Clientes */}
+      {view === 'clientes' && isAdmin && (
+        <AdminPanel
+          token={token}
+          apiUrl={API_URL}
+          onEntrarComoCliente={(clienteToken, clienteCompany) => {
+            setToken(clienteToken);
+            setCompany(clienteCompany);
+            setIsAdmin(false);
+            localStorage.setItem('pulso_token', clienteToken);
+            localStorage.setItem('pulso_company', JSON.stringify(clienteCompany));
+            localStorage.setItem('pulso_is_admin', 'false');
+            setView('pipeline');
+          }}
         />
       )}
 
