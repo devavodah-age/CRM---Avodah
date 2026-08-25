@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Wifi, WifiOff, Loader2, X, Eye, EyeOff, Building2 } from "lucide-react";
 
-const PRIMARY = "#4F3CC9";
-const SIDEBAR = "#241C57";
-const INK = "#14171F";
+const BG = "#08090C";
+const SURFACE = "#0F1117";
+const SURFACE2 = "#161821";
+const PRIMARY = "#6366F1";
+const TEXT = "#F1F5F9";
+const MUTED = "#94A3B8";
+const SUBTLE = "#475569";
+const BORDER = "rgba(255,255,255,0.06)";
 
 export default function AdminPanel({ token, apiUrl, onEntrarComoCliente }) {
   const [companies, setCompanies] = useState([]);
@@ -20,11 +25,7 @@ export default function AdminPanel({ token, apiUrl, onEntrarComoCliente }) {
   async function apiFetch(path, opts = {}) {
     const res = await fetch(apiUrl + path, {
       ...opts,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...opts.headers,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Erro interno");
@@ -33,37 +34,23 @@ export default function AdminPanel({ token, apiUrl, onEntrarComoCliente }) {
 
   async function carregar() {
     try {
-      setLoading(true);
-      setErro(null);
+      setLoading(true); setErro(null);
       const data = await apiFetch("/companies");
       setCompanies(data.companies);
-    } catch (e) {
-      setErro(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErro(e.message); } finally { setLoading(false); }
   }
 
   useEffect(() => { carregar(); }, []);
 
   async function criarEmpresa(e) {
-    e.preventDefault();
-    setFormErro("");
-    if (!form.companyName || !form.userName || !form.email || !form.password) {
-      setFormErro("Preencha todos os campos.");
-      return;
-    }
+    e.preventDefault(); setFormErro("");
+    if (!form.companyName || !form.userName || !form.email || !form.password) { setFormErro("Preencha todos os campos."); return; }
     try {
       setFormLoading(true);
       await apiFetch("/companies", { method: "POST", body: JSON.stringify(form) });
-      setShowForm(false);
-      setForm({ companyName: "", userName: "", email: "", password: "" });
+      setShowForm(false); setForm({ companyName: "", userName: "", email: "", password: "" });
       await carregar();
-    } catch (e) {
-      setFormErro(e.message);
-    } finally {
-      setFormLoading(false);
-    }
+    } catch (e) { setFormErro(e.message); } finally { setFormLoading(false); }
   }
 
   async function deletarEmpresa(id, nome) {
@@ -72,11 +59,7 @@ export default function AdminPanel({ token, apiUrl, onEntrarComoCliente }) {
       setDeletando(id);
       await apiFetch(`/companies/${id}`, { method: "DELETE" });
       await carregar();
-    } catch (e) {
-      alert("Erro ao deletar: " + e.message);
-    } finally {
-      setDeletando(null);
-    }
+    } catch (e) { alert("Erro ao deletar: " + e.message); } finally { setDeletando(null); }
   }
 
   async function entrarComoCliente(company) {
@@ -84,194 +67,125 @@ export default function AdminPanel({ token, apiUrl, onEntrarComoCliente }) {
       setEntrando(company.id);
       const data = await apiFetch(`/companies/${company.id}/token`, { method: "POST" });
       onEntrarComoCliente(data.token, company);
-    } catch (e) {
-      alert("Erro ao entrar como cliente: " + e.message);
-    } finally {
-      setEntrando(null);
-    }
+    } catch (e) { alert("Erro ao entrar como cliente: " + e.message); } finally { setEntrando(null); }
   }
 
   function statusWa(status) {
-    if (status === "open") return { cor: "#16A34A", label: "Conectado", icon: <Wifi size={12} /> };
-    if (status === "qr") return { cor: "#F59E0B", label: "Aguard. QR", icon: <Wifi size={12} /> };
-    if (status === "connecting") return { cor: "#3B82F6", label: "Conectando", icon: <Loader2 size={12} className="animate-spin" /> };
-    return { cor: "#9CA3AF", label: "Desconectado", icon: <WifiOff size={12} /> };
+    if (status === "open") return { cor: "#22C55E", label: "Conectado", icon: <Wifi size={11} strokeWidth={1.5} /> };
+    if (status === "qr") return { cor: "#F59E0B", label: "Aguard. QR", icon: <Wifi size={11} strokeWidth={1.5} /> };
+    if (status === "connecting") return { cor: "#38BDF8", label: "Conectando", icon: <Loader2 size={11} strokeWidth={1.5} className="animate-spin" /> };
+    return { cor: SUBTLE, label: "Desconectado", icon: <WifiOff size={11} strokeWidth={1.5} /> };
   }
 
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', fontSize: 13, borderRadius: 8, border: `1px solid ${BORDER}`,
+    background: 'rgba(255,255,255,0.04)', color: TEXT, outline: 'none', boxSizing: 'border-box',
+    fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'border-color 0.15s',
+  };
+
   return (
-    <div style={{ padding: "32px", maxWidth: 860, margin: "0 auto" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: INK, marginBottom: 4 }}>
-            Clientes
-          </h2>
-          <p style={{ fontSize: 14, color: "#6B7280" }}>
-            Gerencie todas as empresas cadastradas na plataforma.
-          </p>
+    <div style={{ height: '100%', overflowY: 'auto', padding: 28, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div style={{ maxWidth: 820, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: TEXT, margin: 0 }}>Clientes</h2>
+            <p style={{ fontSize: 13, color: SUBTLE, margin: '4px 0 0' }}>Gerencie todas as empresas cadastradas na plataforma.</p>
+          </div>
+          <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <Plus size={14} strokeWidth={2} /> Novo cliente
+          </button>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
-          style={{ backgroundColor: PRIMARY }}
-        >
-          <Plus size={15} /> Novo cliente
-        </button>
-      </div>
 
-      {/* Estado de carga / erro */}
-      {loading && (
-        <div className="flex items-center justify-center py-16 text-gray-400 gap-2">
-          <Loader2 size={18} className="animate-spin" /> Carregando...
-        </div>
-      )}
-      {erro && (
-        <div className="text-red-500 text-sm text-center py-8">{erro}</div>
-      )}
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0', color: SUBTLE, gap: 8, fontSize: 13 }}>
+            <Loader2 size={18} className="animate-spin" /> Carregando...
+          </div>
+        )}
+        {erro && <div style={{ color: '#F43F5E', fontSize: 13, textAlign: 'center', padding: '32px 0' }}>{erro}</div>}
 
-      {/* Lista de empresas */}
-      {!loading && !erro && (
-        <div className="flex flex-col gap-3">
-          {companies.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
-              <Building2 size={32} className="mx-auto mb-3 opacity-30" />
-              <p>Nenhum cliente cadastrado ainda.</p>
-            </div>
-          )}
-          {companies.map((c) => {
-            const wa = statusWa(c.whatsapp_status);
-            return (
-              <div
-                key={c.id}
-                className="flex items-center gap-4 bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm"
-              >
-                {/* Avatar */}
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                  style={{ backgroundColor: SIDEBAR }}
-                >
-                  {c.name.slice(0, 2).toUpperCase()}
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm" style={{ color: INK }}>
-                    {c.name}
-                  </p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    <span>{c.usuarios} usuário(s)</span>
-                    <span>·</span>
-                    <span>{c.leads} lead(s)</span>
-                    <span>·</span>
-                    <span>desde {new Date(c.created_at).toLocaleDateString("pt-BR")}</span>
+        {!loading && !erro && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {companies.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '64px 0', color: SUBTLE }}>
+                <Building2 size={32} style={{ opacity: 0.2, marginBottom: 12 }} />
+                <p style={{ fontSize: 13, margin: 0 }}>Nenhum cliente cadastrado ainda.</p>
+              </div>
+            )}
+            {companies.map((c) => {
+              const wa = statusWa(c.whatsapp_status);
+              return (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 18px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                    {c.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: TEXT }}>{c.name}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 11, color: SUBTLE }}>
+                      <span>{c.usuarios} usuário(s)</span>
+                      <span>·</span>
+                      <span>{c.leads} lead(s)</span>
+                      <span>·</span>
+                      <span>desde {new Date(c.created_at).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: wa.cor + '18', color: wa.cor, flexShrink: 0 }}>
+                    {wa.icon} {wa.label}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button onClick={() => entrarComoCliente(c)} disabled={entrando === c.id} style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: `1px solid rgba(99,102,241,0.3)`, background: 'rgba(99,102,241,0.08)', color: '#818CF8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {entrando === c.id ? <Loader2 size={12} strokeWidth={1.5} className="animate-spin" /> : "Entrar"}
+                    </button>
+                    <button onClick={() => deletarEmpresa(c.id, c.name)} disabled={deletando === c.id} style={{ width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, cursor: 'pointer', color: SUBTLE }} title="Deletar empresa">
+                      {deletando === c.id ? <Loader2 size={12} strokeWidth={1.5} className="animate-spin" /> : <Trash2 size={13} strokeWidth={1.5} />}
+                    </button>
                   </div>
                 </div>
-
-                {/* WhatsApp status */}
-                <div
-                  className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: wa.cor + "18", color: wa.cor }}
-                >
-                  {wa.icon} {wa.label}
-                </div>
-
-                {/* Ações */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => entrarComoCliente(c)}
-                    disabled={entrando === c.id}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors hover:bg-indigo-50"
-                    style={{ borderColor: PRIMARY, color: PRIMARY }}
-                    title="Entrar no CRM deste cliente"
-                  >
-                    {entrando === c.id ? <Loader2 size={13} className="animate-spin" /> : "Entrar"}
-                  </button>
-                  <button
-                    onClick={() => deletarEmpresa(c.id, c.name)}
-                    disabled={deletando === c.id}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-                    title="Deletar empresa"
-                  >
-                    {deletando === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={14} />}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Modal: Novo cliente */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-lg" style={{ color: INK }}>Novo cliente</h3>
-              <button onClick={() => { setShowForm(false); setFormErro(""); }} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={criarEmpresa} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Nome da empresa</label>
-                <input
-                  className="pulso-input w-full border border-gray-200 rounded-lg text-sm"
-                  placeholder="Ex: Clínica Saúde Total"
-                  value={form.companyName}
-                  onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Nome do usuário responsável</label>
-                <input
-                  className="pulso-input w-full border border-gray-200 rounded-lg text-sm"
-                  placeholder="Ex: João Silva"
-                  value={form.userName}
-                  onChange={(e) => setForm((f) => ({ ...f, userName: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Email</label>
-                <input
-                  type="email"
-                  className="pulso-input w-full border border-gray-200 rounded-lg text-sm"
-                  placeholder="cliente@empresa.com"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Senha inicial</label>
-                <div className="relative">
-                  <input
-                    type={showPass ? "text" : "password"}
-                    className="pulso-input w-full border border-gray-200 rounded-lg text-sm pr-10"
-                    placeholder="Mínimo 8 caracteres"
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPass((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-              </div>
-              {formErro && <p className="text-red-500 text-xs">{formErro}</p>}
-              <button
-                type="submit"
-                disabled={formLoading}
-                className="w-full text-white rounded-xl py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 flex items-center justify-center gap-2 mt-1"
-                style={{ backgroundColor: PRIMARY }}
-              >
-                {formLoading ? <Loader2 size={15} className="animate-spin" /> : "Criar cliente"}
-              </button>
-            </form>
+              );
+            })}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Modal: Novo cliente */}
+        {showForm && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={() => { setShowForm(false); setFormErro(""); }} />
+            <div style={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 24, width: '100%', maxWidth: 400, margin: '0 16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: TEXT }}>Novo cliente</h3>
+                <button onClick={() => { setShowForm(false); setFormErro(""); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 4 }}><X size={16} strokeWidth={1.5} /></button>
+              </div>
+              <form onSubmit={criarEmpresa} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: SUBTLE, display: 'block', marginBottom: 5 }}>Nome da empresa</label>
+                  <input style={inputStyle} placeholder="Ex: Clínica Saúde Total" value={form.companyName} onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: SUBTLE, display: 'block', marginBottom: 5 }}>Nome do usuário responsável</label>
+                  <input style={inputStyle} placeholder="Ex: João Silva" value={form.userName} onChange={(e) => setForm((f) => ({ ...f, userName: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: SUBTLE, display: 'block', marginBottom: 5 }}>Email</label>
+                  <input type="email" style={inputStyle} placeholder="cliente@empresa.com" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: SUBTLE, display: 'block', marginBottom: 5 }}>Senha inicial</label>
+                  <div style={{ position: 'relative' }}>
+                    <input type={showPass ? "text" : "password"} style={{ ...inputStyle, paddingRight: 38 }} placeholder="Mínimo 8 caracteres" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
+                    <button type="button" onClick={() => setShowPass((v) => !v)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 2 }}>
+                      {showPass ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
+                    </button>
+                  </div>
+                </div>
+                {formErro && <p style={{ fontSize: 12, color: '#F43F5E', margin: 0 }}>{formErro}</p>}
+                <button type="submit" disabled={formLoading} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, opacity: formLoading ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {formLoading ? <Loader2 size={14} strokeWidth={1.5} className="animate-spin" /> : "Criar cliente"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

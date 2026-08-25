@@ -1,48 +1,27 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  LayoutGrid,
-  Users,
-  Zap,
-  Settings,
-  Search,
-  Plus,
-  X,
-  Send,
-  Phone,
-  Building2,
-  Flame,
-  Snowflake,
-  Trash2,
-  MessageCircle,
-  LogOut,
-  Loader2,
-  Smartphone,
-  Pencil,
-  DollarSign,
-  Edit2,
-  Check,
-  BarChart2,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  MessageSquare,
-  ChevronRight,
-  Calendar,
+  LayoutGrid, Users, Zap, Settings, Search, Plus, X, Send, Phone, Building2,
+  Flame, Snowflake, Trash2, MessageCircle, LogOut, Loader2, Smartphone,
+  Pencil, DollarSign, Edit2, Check, BarChart2, TrendingUp, TrendingDown,
+  Activity, MessageSquare, ChevronRight, Calendar,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 import AdminPanel from "./AdminPanel";
 
-// URL do backend. Em desenvolvimento local o backend roda em localhost:3001.
-// Quando você hospedar o backend de verdade (Railway, Render, etc.), troque
-// esse valor pela URL pública dele.
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
-// ---------- Design tokens ----------
-const INK = "#14171F";
-const SIDEBAR = "#241C57";
-const PRIMARY = "#4F3CC9";
-const SUCCESS = "#16A34A";
-const DANGER = "#E11D48";
+// Design tokens
+const BG = "#08090C";
+const SURFACE = "#0F1117";
+const SURFACE2 = "#161821";
+const PRIMARY = "#6366F1";
+const SUCCESS = "#22C55E";
+const DANGER = "#F43F5E";
+const TEXT = "#F1F5F9";
+const MUTED = "#94A3B8";
+const SUBTLE = "#475569";
+const BORDER = "rgba(255,255,255,0.06)";
+const INK = TEXT;
 
 const STAGES = [
   { id: "novo", name: "Novo Lead", temp: 0 },
@@ -54,7 +33,7 @@ const STAGES = [
 ];
 
 function heatColor(t) {
-  const from = [59, 130, 246];
+  const from = [99, 102, 241];
   const to = [249, 115, 22];
   const r = Math.round(from[0] + (to[0] - from[0]) * t);
   const g = Math.round(from[1] + (to[1] - from[1]) * t);
@@ -62,33 +41,20 @@ function heatColor(t) {
   return `rgb(${r},${g},${b})`;
 }
 
-function stageColor(stage) {
-  return stage.color || heatColor(stage.temp);
-}
-
-function stageById(id) {
-  return STAGES.find((s) => s.id === id) || STAGES[0];
-}
+function stageColor(stage) { return stage.color || heatColor(stage.temp); }
+function stageById(id) { return STAGES.find((s) => s.id === id) || STAGES[0]; }
 
 function formatBRL(v) {
-  return Number(v || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  });
+  return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
 function formatPhone(raw) {
   if (!raw) return '';
   const clean = raw.replace(/\D/g, '');
-  if (clean.startsWith('55') && clean.length === 13)
-    return `+55 (${clean.slice(2,4)}) ${clean.slice(4,9)}-${clean.slice(9)}`;
-  if (clean.startsWith('55') && clean.length === 12)
-    return `+55 (${clean.slice(2,4)}) ${clean.slice(4,8)}-${clean.slice(8)}`;
-  if (clean.length === 11)
-    return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
-  if (clean.length === 10)
-    return `(${clean.slice(0,2)}) ${clean.slice(2,6)}-${clean.slice(6)}`;
+  if (clean.startsWith('55') && clean.length === 13) return `+55 (${clean.slice(2,4)}) ${clean.slice(4,9)}-${clean.slice(9)}`;
+  if (clean.startsWith('55') && clean.length === 12) return `+55 (${clean.slice(2,4)}) ${clean.slice(4,8)}-${clean.slice(8)}`;
+  if (clean.length === 11) return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+  if (clean.length === 10) return `(${clean.slice(0,2)}) ${clean.slice(2,6)}-${clean.slice(6)}`;
   return clean ? `+${clean}` : '';
 }
 
@@ -105,33 +71,50 @@ const AUTO_REPLIES = [
   "Entendi, muito obrigado!",
 ];
 
+const sharedStyle = `
+  .pulso-mono { font-family: 'JetBrains Mono', monospace; }
+  @keyframes pulso-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .pulso-input {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13.5px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: #F1F5F9;
+    outline: none;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: border-color 0.15s;
+  }
+  .pulso-input::placeholder { color: #475569; }
+  .pulso-input:focus { border-color: rgba(99,102,241,0.55); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+  .dark-card {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.4);
+    border-radius: 12px;
+  }
+`;
+
 export default function PulsoCRM() {
-  // ----- autenticação -----
-  // O token fica só em memória (state). Ao recarregar a página, é preciso
-  // logar de novo — isso é proposital enquanto o app roda dentro do preview
-  // do Claude. Numa hospedagem de verdade, dá pra guardar em cookie seguro.
   const [token, setToken] = useState(null);
   const [company, setCompany] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  // Restore session from localStorage on page reload
+
   useEffect(() => {
     const savedToken = localStorage.getItem('pulso_token');
     const savedCompany = localStorage.getItem('pulso_company');
     const savedIsAdmin = localStorage.getItem('pulso_is_admin') === 'true';
     if (savedToken && savedCompany) {
-      try {
-        setToken(savedToken);
-        setCompany(JSON.parse(savedCompany));
-        setIsAdmin(savedIsAdmin);
-      } catch {}
+      try { setToken(savedToken); setCompany(JSON.parse(savedCompany)); setIsAdmin(savedIsAdmin); } catch {}
     }
   }, []);
-  const [authMode, setAuthMode] = useState("login"); // 'login' | 'signup'
+
+  const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({ companyName: "", userName: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  // ----- dados do CRM -----
   const [leads, setLeads] = useState([]);
   const [automations, setAutomations] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -140,88 +123,51 @@ export default function PulsoCRM() {
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [chatInput, setChatInput] = useState("");
   const [toasts, setToasts] = useState([]);
-
   const [showNewLeadModal, setShowNewLeadModal] = useState(false);
   const [newLeadForm, setNewLeadForm] = useState({ name: "", company_name: "", value: "", phone: "" });
-
-  // Flow canvas state
   const [flowEditorOpen, setFlowEditorOpen] = useState(false);
   const [editingAuto, setEditingAuto] = useState(null);
-  const [autoForm, setAutoForm] = useState({
-    name: '',
-    trigger_type: 'new_lead',
-    trigger_config: {},
-    actions: [{ type: 'send_whatsapp', message: 'Olá {nome}! Como posso ajudar?' }],
-  });
-
-  const [waStatus, setWaStatus] = useState('disconnected'); // 'disconnected' | 'qr' | 'open'
+  const [autoForm, setAutoForm] = useState({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [{ type: 'send_whatsapp', message: 'Olá {nome}! Como posso ajudar?' }] });
+  const [waStatus, setWaStatus] = useState('disconnected');
   const [waQr, setWaQr] = useState(null);
   const [waPolling, setWaPolling] = useState(false);
-  const [editingLeadField, setEditingLeadField] = useState(null); // { field, value }
-
-  // Configurações / Pixel
+  const [editingLeadField, setEditingLeadField] = useState(null);
   const [settings, setSettings] = useState({ pixel_id: '', capi_token_set: false });
   const [settingsForm, setSettingsForm] = useState({ pixel_id: '', capi_token: '' });
   const [settingsSaving, setSettingsSaving] = useState(false);
-
-  // Templates de mensagem
   const [templates, setTemplates] = useState([]);
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
   const [templateForm, setTemplateForm] = useState({ name: '', text: '' });
   const [templateSaving, setTemplateSaving] = useState(false);
-
-  // CSV Import
   const csvInputRef = useRef(null);
-  const [importPreview, setImportPreview] = useState(null); // { rows: [], fileName }
+  const [importPreview, setImportPreview] = useState(null);
   const [importing, setImporting] = useState(false);
-
-  // Conversas view
   const [convLeadId, setConvLeadId] = useState(null);
-
   const idRef = useRef(1);
-  const nextId = () => {
-    idRef.current += 1;
-    return idRef.current;
-  };
-
+  const nextId = () => { idRef.current += 1; return idRef.current; };
   const selectedLead = leads.find((l) => l.id === selectedLeadId) || null;
 
   function addToast(text) {
     const id = nextId();
     setToasts((prev) => [...prev, { id, text }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }
 
   async function apiFetch(path, options = {}) {
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {}),
-      },
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
     });
     let data = {};
-    try {
-      data = await res.json();
-    } catch (e) {
-      data = {};
-    }
-    if (!res.ok) {
-      throw new Error(data.error || "Erro ao falar com o servidor");
-    }
+    try { data = await res.json(); } catch (e) { data = {}; }
+    if (!res.ok) throw new Error(data.error || "Erro ao falar com o servidor");
     return data;
   }
 
   async function loadData() {
     setLoadingData(true);
     try {
-      const [leadsData, automationsData] = await Promise.all([
-        apiFetch("/leads"),
-        apiFetch("/automations"),
-      ]);
+      const [leadsData, automationsData] = await Promise.all([apiFetch("/leads"), apiFetch("/automations")]);
       setLeads(leadsData);
       setAutomations(automationsData);
     } catch (err) {
@@ -231,7 +177,6 @@ export default function PulsoCRM() {
     }
   }
 
-  // Carrega Pixel do Facebook dinamicamente com o pixel_id da empresa
   function loadFbPixel(pixelId) {
     if (!pixelId || window._fbPixelLoaded) return;
     window._fbPixelLoaded = true;
@@ -245,56 +190,28 @@ export default function PulsoCRM() {
   useEffect(() => {
     if (!token) return;
     loadData();
-    // Check WA status on mount/token restore
     fetch(`${API_URL}/whatsapp/status`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => { setWaStatus(data.status); if (data.qrDataUrl) setWaQr(data.qrDataUrl); })
-      .catch(() => {});
-    // Carregar configurações e inicializar Pixel
+      .then(r => r.json()).then(data => { setWaStatus(data.status); if (data.qrDataUrl) setWaQr(data.qrDataUrl); }).catch(() => {});
     fetch(`${API_URL}/settings`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => {
-        setSettings(data);
-        setSettingsForm({ pixel_id: data.pixel_id || '', capi_token: '' });
-        if (data.pixel_id) loadFbPixel(data.pixel_id);
-      })
-      .catch(() => {});
-    // Carregar templates de mensagem
+      .then(r => r.json()).then(data => { setSettings(data); setSettingsForm({ pixel_id: data.pixel_id || '', capi_token: '' }); if (data.pixel_id) loadFbPixel(data.pixel_id); }).catch(() => {});
     fetch(`${API_URL}/templates`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setTemplates(data); })
-      .catch(() => {});
-    // Poll for new leads every 20s (so WhatsApp-created leads appear automatically)
+      .then(r => r.json()).then(data => { if (Array.isArray(data)) setTemplates(data); }).catch(() => {});
     const pollId = setInterval(() => {
       fetch(`${API_URL}/leads`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            setLeads(prev => data.map(newLead => {
-              const existing = prev.find(l => l.id === newLead.id);
-              return { ...newLead, messages: existing?.messages || [] };
-            }));
-          }
-        })
-        .catch(() => {});
+        .then(r => r.json()).then(data => {
+          if (Array.isArray(data)) setLeads(prev => data.map(newLead => { const existing = prev.find(l => l.id === newLead.id); return { ...newLead, messages: existing?.messages || [] }; }));
+        }).catch(() => {});
     }, 20000);
     return () => clearInterval(pollId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Poll messages for the open lead chat every 5s (drawer or conversas view)
   const activeChatLeadId = selectedLeadId || convLeadId;
   useEffect(() => {
     if (!token || !activeChatLeadId) return;
     const pollMessages = () => {
       fetch(`${API_URL}/leads/${activeChatLeadId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(msgs => {
-          if (Array.isArray(msgs)) {
-            setLeads(prev => prev.map(l => l.id === activeChatLeadId ? { ...l, messages: msgs } : l));
-          }
-        })
-        .catch(() => {});
+        .then(r => r.json()).then(msgs => { if (Array.isArray(msgs)) setLeads(prev => prev.map(l => l.id === activeChatLeadId ? { ...l, messages: msgs } : l)); }).catch(() => {});
     };
     pollMessages();
     const id = setInterval(pollMessages, 5000);
@@ -305,11 +222,8 @@ export default function PulsoCRM() {
     if (!token || !waPolling) return;
     const poll = async () => {
       try {
-        const res = await fetch(`${API_URL}/whatsapp/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`${API_URL}/whatsapp/status`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
-        // While polling, treat momentary 'disconnected' (backend retry gap) as 'connecting'
         setWaStatus(data.status === 'disconnected' ? 'connecting' : data.status);
         setWaQr(data.qrDataUrl);
         if (data.status === 'open') setWaPolling(false);
@@ -326,43 +240,24 @@ export default function PulsoCRM() {
     setAuthLoading(true);
     try {
       const path = authMode === "login" ? "/auth/login" : "/auth/signup";
-      const body =
-        authMode === "login"
-          ? { email: authForm.email, password: authForm.password }
-          : authForm;
-      const res = await fetch(`${API_URL}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const body = authMode === "login" ? { email: authForm.email, password: authForm.password } : authForm;
+      const res = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Não foi possível entrar");
-      setToken(data.token);
-      setCompany(data.company);
-      setIsAdmin(data.isAdmin === true);
+      setToken(data.token); setCompany(data.company); setIsAdmin(data.isAdmin === true);
       localStorage.setItem('pulso_token', data.token);
       localStorage.setItem('pulso_company', JSON.stringify(data.company));
       localStorage.setItem('pulso_is_admin', data.isAdmin === true ? 'true' : 'false');
     } catch (err) {
-      setAuthError(
-        err.message === "Failed to fetch"
-          ? "Não consegui falar com o backend. Ele está rodando em " + API_URL + " ?"
-          : err.message
-      );
+      setAuthError(err.message === "Failed to fetch" ? "Não consegui falar com o backend. Ele está rodando em " + API_URL + " ?" : err.message);
     } finally {
       setAuthLoading(false);
     }
   }
 
   function logout() {
-    setToken(null);
-    setCompany(null);
-    setLeads([]);
-    setAutomations([]);
-    setSelectedLeadId(null);
-    localStorage.removeItem('pulso_token');
-    localStorage.removeItem('pulso_company');
-    localStorage.removeItem('pulso_is_admin');
+    setToken(null); setCompany(null); setLeads([]); setAutomations([]); setSelectedLeadId(null);
+    localStorage.removeItem('pulso_token'); localStorage.removeItem('pulso_company'); localStorage.removeItem('pulso_is_admin');
     setIsAdmin(false);
   }
 
@@ -370,142 +265,73 @@ export default function PulsoCRM() {
     const previous = leads;
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: stageId } : l)));
     try {
-      const data = await apiFetch(`/leads/${leadId}/stage`, {
-        method: "PATCH",
-        body: JSON.stringify({ stage: stageId }),
-      });
+      const data = await apiFetch(`/leads/${leadId}/stage`, { method: "PATCH", body: JSON.stringify({ stage: stageId }) });
       setLeads((prev) => prev.map((l) => (l.id === leadId ? data.lead : l)));
-      if (data.automationTriggered) {
-        addToast(`Automação executada: ${data.automationTriggered}`);
-      }
+      if (data.automationTriggered) addToast(`Automação executada: ${data.automationTriggered}`);
     } catch (err) {
       setLeads(previous);
       addToast(`Não consegui mover o lead: ${err.message}`);
     }
   }
 
-  function handleDragStart(e, leadId) {
-    e.dataTransfer.setData("text/plain", String(leadId));
-  }
-
-  function handleDrop(e, stageId) {
-    e.preventDefault();
-    const leadId = Number(e.dataTransfer.getData("text/plain"));
-    if (!leadId) return;
-    moveLead(leadId, stageId);
-  }
+  function handleDragStart(e, leadId) { e.dataTransfer.setData("text/plain", String(leadId)); }
+  function handleDrop(e, stageId) { e.preventDefault(); const leadId = Number(e.dataTransfer.getData("text/plain")); if (!leadId) return; moveLead(leadId, stageId); }
 
   async function sendMessage() {
     if (!chatInput.trim() || !selectedLeadId) return;
-    const text = chatInput.trim();
-    const targetId = selectedLeadId;
-    setChatInput("");
+    const text = chatInput.trim(); const targetId = selectedLeadId; setChatInput("");
     try {
-      const message = await apiFetch(`/leads/${targetId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ text }),
-      });
-      setLeads((prev) =>
-        prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l))
-      );
-    } catch (err) {
-      addToast(`Não consegui enviar a mensagem: ${err.message}`);
-    }
+      const message = await apiFetch(`/leads/${targetId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+      setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l)));
+    } catch (err) { addToast(`Não consegui enviar a mensagem: ${err.message}`); }
   }
 
   async function addLead() {
     if (!newLeadForm.name.trim()) return;
     try {
-      const lead = await apiFetch("/leads", {
-        method: "POST",
-        body: JSON.stringify({
-          name: newLeadForm.name,
-          company_name: newLeadForm.company_name,
-          phone: newLeadForm.phone,
-          value: Number(newLeadForm.value) || 0,
-        }),
-      });
+      const lead = await apiFetch("/leads", { method: "POST", body: JSON.stringify({ name: newLeadForm.name, company_name: newLeadForm.company_name, phone: newLeadForm.phone, value: Number(newLeadForm.value) || 0 }) });
       setLeads((prev) => [lead, ...prev]);
       setNewLeadForm({ name: "", company_name: "", value: "", phone: "" });
       setShowNewLeadModal(false);
       addToast(`Lead "${lead.name}" criado`);
-      // Pixel browser-side (redundância com CAPI server-side)
       if (window.fbq) window.fbq('track', 'Lead');
-    } catch (err) {
-      addToast(`Não consegui criar o lead: ${err.message}`);
-    }
+    } catch (err) { addToast(`Não consegui criar o lead: ${err.message}`); }
   }
 
   async function toggleAutomation(auto) {
     try {
-      const updated = await apiFetch(`/automations/${auto.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ enabled: !auto.enabled }),
-      });
+      const updated = await apiFetch(`/automations/${auto.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !auto.enabled }) });
       setAutomations((prev) => prev.map((a) => (a.id === auto.id ? updated : a)));
-    } catch (err) {
-      addToast(`Não consegui atualizar a automação: ${err.message}`);
-    }
+    } catch (err) { addToast(`Não consegui atualizar a automação: ${err.message}`); }
   }
 
   async function deleteAutomation(id) {
     try {
       await apiFetch(`/automations/${id}`, { method: "DELETE" });
       setAutomations((prev) => prev.filter((a) => a.id !== id));
-    } catch (err) {
-      addToast(`Não consegui apagar a automação: ${err.message}`);
-    }
+    } catch (err) { addToast(`Não consegui apagar a automação: ${err.message}`); }
   }
 
   async function connectWhatsApp() {
     try {
-      await fetch(`${API_URL}/whatsapp/connect`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await fetch(`${API_URL}/whatsapp/connect`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       setWaPolling(true);
-    } catch (err) {
-      addToast('Erro ao iniciar conexão WhatsApp');
-    }
+    } catch (err) { addToast('Erro ao iniciar conexão WhatsApp'); }
   }
 
   async function disconnectWhatsApp() {
     try {
-      await fetch(`${API_URL}/whatsapp/disconnect`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setWaStatus('disconnected');
-      setWaQr(null);
-      setWaPolling(false);
+      await fetch(`${API_URL}/whatsapp/disconnect`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      setWaStatus('disconnected'); setWaQr(null); setWaPolling(false);
     } catch {}
-  }
-
-  async function sendWhatsAppMessage(leadId, phone, text) {
-    try {
-      const res = await fetch(`${API_URL}/whatsapp/send`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId, phone, text }),
-      });
-      if (!res.ok) throw new Error('Falha ao enviar');
-      addToast('Mensagem enviada!');
-    } catch (err) {
-      addToast(`Erro: ${err.message}`);
-    }
   }
 
   async function updateLead(leadId, fields) {
     try {
-      const updated = await apiFetch(`/leads/${leadId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(fields),
-      });
+      const updated = await apiFetch(`/leads/${leadId}`, { method: 'PATCH', body: JSON.stringify(fields) });
       setLeads(prev => prev.map(l => l.id === leadId ? updated : l));
       addToast('Lead atualizado');
-    } catch (err) {
-      addToast(`Erro: ${err.message}`);
-    }
+    } catch (err) { addToast(`Erro: ${err.message}`); }
   }
 
   async function deleteLead(leadId) {
@@ -515,9 +341,7 @@ export default function PulsoCRM() {
       setLeads(prev => prev.filter(l => l.id !== leadId));
       setSelectedLeadId(null);
       addToast('Lead excluído');
-    } catch (err) {
-      addToast(`Erro: ${err.message}`);
-    }
+    } catch (err) { addToast(`Erro: ${err.message}`); }
   }
 
   function parseCSV(text) {
@@ -533,73 +357,38 @@ export default function PulsoCRM() {
   }
 
   function handleCSVFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
-      const rows = parseCSV(ev.target.result);
-      setImportPreview({ rows, fileName: file.name });
-    };
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
+    reader.onload = ev => { const rows = parseCSV(ev.target.result); setImportPreview({ rows, fileName: file.name }); };
+    reader.readAsText(file, 'UTF-8'); e.target.value = '';
   }
 
   async function confirmImport() {
     if (!importPreview) return;
     setImporting(true);
     try {
-      const data = await apiFetch('/leads/import', {
-        method: 'POST',
-        body: JSON.stringify({ leads: importPreview.rows }),
-      });
+      const data = await apiFetch('/leads/import', { method: 'POST', body: JSON.stringify({ leads: importPreview.rows }) });
       addToast(`${data.imported} leads importados com sucesso!`);
-      setImportPreview(null);
-      await loadData();
-    } catch (err) {
-      addToast(`Erro na importação: ${err.message}`);
-    } finally {
-      setImporting(false);
-    }
+      setImportPreview(null); await loadData();
+    } catch (err) { addToast(`Erro na importação: ${err.message}`); } finally { setImporting(false); }
   }
 
   async function saveTemplate() {
     if (!templateForm.name.trim() || !templateForm.text.trim()) return;
     setTemplateSaving(true);
     try {
-      const created = await apiFetch('/templates', {
-        method: 'POST',
-        body: JSON.stringify({ name: templateForm.name, text: templateForm.text }),
-      });
-      setTemplates(prev => [...prev, created]);
-      setTemplateForm({ name: '', text: '' });
-      addToast('Template salvo!');
-    } catch (err) {
-      addToast(`Erro: ${err.message}`);
-    } finally {
-      setTemplateSaving(false);
-    }
+      const created = await apiFetch('/templates', { method: 'POST', body: JSON.stringify({ name: templateForm.name, text: templateForm.text }) });
+      setTemplates(prev => [...prev, created]); setTemplateForm({ name: '', text: '' }); addToast('Template salvo!');
+    } catch (err) { addToast(`Erro: ${err.message}`); } finally { setTemplateSaving(false); }
   }
 
   async function deleteTemplate(id) {
-    try {
-      await apiFetch(`/templates/${id}`, { method: 'DELETE' });
-      setTemplates(prev => prev.filter(t => t.id !== id));
-    } catch (err) {
-      addToast(`Erro: ${err.message}`);
-    }
+    try { await apiFetch(`/templates/${id}`, { method: 'DELETE' }); setTemplates(prev => prev.filter(t => t.id !== id)); }
+    catch (err) { addToast(`Erro: ${err.message}`); }
   }
 
-  function openNewAutomation() {
-    setEditingAuto(null);
-    setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [] });
-    setFlowEditorOpen(true);
-  }
-
-  function openEditAutomation(auto) {
-    setEditingAuto(auto);
-    setAutoForm({ name: auto.name, trigger_type: auto.trigger_type, trigger_config: auto.trigger_config || {}, actions: auto.actions || [] });
-    setFlowEditorOpen(true);
-  }
+  function openNewAutomation() { setEditingAuto(null); setAutoForm({ name: '', trigger_type: 'new_lead', trigger_config: {}, actions: [] }); setFlowEditorOpen(true); }
+  function openEditAutomation(auto) { setEditingAuto(auto); setAutoForm({ name: auto.name, trigger_type: auto.trigger_type, trigger_config: auto.trigger_config || {}, actions: auto.actions || [] }); setFlowEditorOpen(true); }
 
   const filteredLeads = leads.filter((l) => {
     const q = searchTerm.toLowerCase();
@@ -614,71 +403,63 @@ export default function PulsoCRM() {
     conversas: ["Conversas", "Acompanhe as conversas com seus leads"],
     whatsapp: ["WhatsApp", "Conecte e gerencie sua conta WhatsApp"],
     configuracoes: ["Configurações", "Pixel, API de Conversões e outras integrações"],
+    clientes: ["Clientes", "Gerencie todas as empresas da plataforma"],
   };
 
-  const sharedStyle = `
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
-    .pulso-mono { font-family: 'IBM Plex Mono', monospace; }
-    .pulso-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-    .pulso-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
-    @keyframes pulso-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-    .pulso-input { width: 100%; padding: 8px 12px; font-size: 14px; border-radius: 8px; border: 1px solid #E5E7EB; outline: none; }
-    .pulso-input:focus { border-color: ${PRIMARY}; }
-  `;
-
-  // ---------- Tela de login / cadastro ----------
+  // ---------- Login screen ----------
   if (!token) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-[#F5F6FA]" style={{ color: INK, fontFamily: "Inter, sans-serif", height: "100vh" }}>
+      <div style={{ width: '100%', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: BG, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <style>{sharedStyle}</style>
-        <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8">
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm relative mb-3" style={{ fontFamily: "Sora, sans-serif", backgroundColor: PRIMARY }}>
+
+        {/* Ambient glow */}
+        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)' }} />
+        </div>
+
+        <div style={{ width: '100%', maxWidth: 380, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '36px 32px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 24px 64px rgba(0,0,0,0.6)', position: 'relative' }}>
+          {/* Logo */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 12, boxShadow: `0 0 24px rgba(99,102,241,0.4)`, position: 'relative' }}>
               P
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400" style={{ animation: "pulso-pulse 2s ease-in-out infinite" }} />
+              <span style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 10, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: `2px solid ${SURFACE}` }} />
             </div>
-            <h1 className="text-lg font-bold" style={{ fontFamily: "Sora, sans-serif" }}>Pulso CRM</h1>
-            <p className="text-xs text-gray-400 mt-1">{authMode === "login" ? "Entre na sua conta" : "Crie a conta da sua empresa"}</p>
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: TEXT, margin: 0 }}>Pulso CRM</h1>
+            <p style={{ fontSize: 13, color: SUBTLE, margin: '4px 0 0' }}>{authMode === "login" ? "Entre na sua conta" : "Crie a conta da sua empresa"}</p>
           </div>
 
-          <form onSubmit={handleAuthSubmit} className="space-y-3">
+          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {authMode === "signup" && (
               <>
                 <Field label="Nome da empresa">
-                  <input required className="pulso-input" value={authForm.companyName} onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })} />
+                  <input required className="pulso-input" placeholder="Ex: Agência Digital" value={authForm.companyName} onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })} />
                 </Field>
                 <Field label="Seu nome">
-                  <input required className="pulso-input" value={authForm.userName} onChange={(e) => setAuthForm({ ...authForm, userName: e.target.value })} />
+                  <input required className="pulso-input" placeholder="João Silva" value={authForm.userName} onChange={(e) => setAuthForm({ ...authForm, userName: e.target.value })} />
                 </Field>
               </>
             )}
             <Field label="Email">
-              <input required type="email" className="pulso-input" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} />
+              <input required type="email" className="pulso-input" placeholder="voce@empresa.com" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} />
             </Field>
             <Field label="Senha">
-              <input required type="password" className="pulso-input" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} />
+              <input required type="password" className="pulso-input" placeholder="••••••••" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} />
             </Field>
 
-            {authError && <p className="text-xs text-rose-500">{authError}</p>}
+            {authError && <p style={{ fontSize: 12, color: DANGER, margin: 0 }}>{authError}</p>}
 
-            <button disabled={authLoading} type="submit" className="w-full py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: PRIMARY }}>
+            <button disabled={authLoading} type="submit" style={{ marginTop: 4, width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(99,102,241,0.3)', opacity: authLoading ? 0.7 : 1, transition: 'opacity 0.15s' }}>
               {authLoading && <Loader2 size={14} className="animate-spin" />}
               {authMode === "login" ? "Entrar" : "Criar conta"}
             </button>
           </form>
 
-          <button
-            onClick={() => {
-              setAuthMode(authMode === "login" ? "signup" : "login");
-              setAuthError("");
-            }}
-            className="w-full text-center text-xs text-gray-400 mt-4 hover:text-gray-600"
-          >
+          <button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError(""); }} style={{ width: '100%', textAlign: 'center', fontSize: 12, color: SUBTLE, marginTop: 16, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             {authMode === "login" ? "Não tem conta? Cadastre sua empresa" : "Já tem conta? Entrar"}
           </button>
 
-          <p className="text-[11px] text-gray-300 text-center mt-4">
-            Backend esperado em <span className="pulso-mono">{API_URL}</span>
+          <p style={{ fontSize: 11, color: '#334155', textAlign: 'center', marginTop: 12 }}>
+            Backend em <span className="pulso-mono">{API_URL}</span>
           </p>
         </div>
       </div>
@@ -686,276 +467,244 @@ export default function PulsoCRM() {
   }
 
   // ---------- App principal ----------
+  const currentTitle = titles[view] || ["", ""];
+
   return (
-    <div className="w-full h-full flex bg-[#F5F6FA]" style={{ color: INK, fontFamily: "Inter, sans-serif", height: "100vh" }}>
+    <div style={{ width: '100%', height: '100vh', display: 'flex', background: BG, color: TEXT, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{sharedStyle}</style>
 
       {/* Sidebar */}
-      <aside className="w-16 flex-shrink-0 flex flex-col items-center py-5 gap-6" style={{ backgroundColor: SIDEBAR }}>
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm relative" style={{ fontFamily: "Sora, sans-serif", backgroundColor: PRIMARY }}>
+      <aside style={{ width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16, paddingBottom: 16, background: '#0A0B0F', borderRight: `1px solid ${BORDER}`, gap: 0 }}>
+        {/* Logo */}
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', position: 'relative', marginBottom: 20, boxShadow: `0 0 16px rgba(99,102,241,0.35)`, flexShrink: 0 }}>
           P
-          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400" style={{ animation: "pulso-pulse 2s ease-in-out infinite" }} />
+          <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: '1.5px solid #0A0B0F' }} />
         </div>
-        <nav className="flex flex-col gap-2 mt-4">
-          <SideBtn active={view === "dashboard"} onClick={() => setView("dashboard")} icon={<BarChart2 size={19} />} title="Dashboard" />
-          <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={19} />} title="Pipeline" />
-          <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={19} />} title="Contatos" />
-          <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={19} />} title="Automações" />
-          <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={19} />} title="Conversas" />
-          <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={19} />} title="WhatsApp" />
-          <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={19} />} title="Configurações" />
+
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', alignItems: 'center', flex: 1 }}>
+          <SideBtn active={view === "dashboard"} onClick={() => setView("dashboard")} icon={<BarChart2 size={18} strokeWidth={1.5} />} title="Dashboard" />
+          <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={18} strokeWidth={1.5} />} title="Pipeline" />
+          <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={18} strokeWidth={1.5} />} title="Contatos" />
+          <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={18} strokeWidth={1.5} />} title="Automações" />
+          <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={18} strokeWidth={1.5} />} title="Conversas" />
+          <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={18} strokeWidth={1.5} />} title="WhatsApp" />
+          <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={18} strokeWidth={1.5} />} title="Configurações" />
           {isAdmin && (
-            <SideBtn active={view === "clientes"} onClick={() => setView("clientes")} icon={<Building2 size={19} />} title="Clientes (Admin)" />
+            <SideBtn active={view === "clientes"} onClick={() => setView("clientes")} icon={<Building2 size={18} strokeWidth={1.5} />} title="Clientes (Admin)" />
           )}
         </nav>
-        <div className="mt-auto flex flex-col gap-4 items-center">
-          <button title="Sair" onClick={logout} className="text-white/50 hover:text-white/90 transition-colors">
-            <LogOut size={17} />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <button title="Sair" onClick={logout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6, display: 'flex', transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = TEXT} onMouseLeave={e => e.currentTarget.style.color = SUBTLE}>
+            <LogOut size={16} strokeWidth={1.5} />
           </button>
-          <div title={company?.name} className="w-8 h-8 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center justify-center">
+          <div title={company?.name} style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(99,102,241,0.15)', border: `1px solid rgba(99,102,241,0.3)`, color: '#818CF8', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {(company?.name || "?").slice(0, 2).toUpperCase()}
           </div>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 flex items-center justify-between px-6 border-b border-black/5 bg-white flex-shrink-0">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Header */}
+        <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: `1px solid ${BORDER}`, background: SURFACE, flexShrink: 0 }}>
           <div>
-            <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Sora, sans-serif" }}>{titles[view][0]}</h1>
-            <p className="text-xs text-gray-400">{titles[view][1]}</p>
+            <h1 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: TEXT }}>{currentTitle[0]}</h1>
+            <p style={{ fontSize: 11, color: SUBTLE, margin: 0 }}>{currentTitle[1]}</p>
           </div>
-          <div className="flex items-center gap-3">
-            {!["automacoes","configuracoes","conversas","dashboard"].includes(view) && (
-              <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar lead ou empresa..."
-                  className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9] w-56"
-                />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {!["automacoes","configuracoes","conversas","dashboard","clientes"].includes(view) && (
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: SUBTLE, pointerEvents: 'none' }} />
+                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Buscar lead..." style={{ paddingLeft: 32, paddingRight: 12, paddingTop: 7, paddingBottom: 7, fontSize: 13, borderRadius: 8, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.04)', color: TEXT, outline: 'none', width: 200, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
               </div>
             )}
             {(view === "pipeline" || view === "contatos") && (
               <>
-                <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
-                <button onClick={() => csvInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <input ref={csvInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCSVFile} />
+                <button onClick={() => csvInputRef.current?.click()} style={{ padding: '7px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.04)', color: MUTED, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Importar CSV
                 </button>
-                <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
-                  <Plus size={15} /> Novo Lead
+                <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 0 16px rgba(99,102,241,0.3)' }}>
+                  <Plus size={14} strokeWidth={2} /> Novo Lead
                 </button>
               </>
             )}
             {view === "automacoes" && (
-              <button onClick={openNewAutomation} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
-                <Plus size={15} /> Nova Automação
+              <button onClick={openNewAutomation} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <Plus size={14} strokeWidth={2} /> Nova Automação
               </button>
             )}
             {view === "conversas" && (
-              <button onClick={() => setShowNewLeadModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
-                <Plus size={15} /> Novo Lead
+              <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <Plus size={14} strokeWidth={2} /> Novo Lead
               </button>
             )}
           </div>
         </header>
 
-        <main className="flex-1 overflow-hidden relative">
+        <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           {loadingData && (
-            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,12,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, backdropFilter: 'blur(4px)' }}>
               <Loader2 size={22} className="animate-spin" style={{ color: PRIMARY }} />
             </div>
           )}
 
-          {view === "dashboard" && (
-            <Dashboard leads={leads} />
-          )}
+          {/* Dashboard */}
+          {view === "dashboard" && <Dashboard leads={leads} />}
 
+          {/* Conversas */}
           {view === "conversas" && (
-            <div className="h-full flex">
-              {/* Lista de conversas */}
-              <div className="w-80 flex-shrink-0 border-r border-black/5 overflow-y-auto pulso-scroll bg-white">
-                <div className="p-3 border-b border-black/5">
-                  <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                      placeholder="Pesquisar..."
-                      className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]"
-                    />
+            <div style={{ height: '100%', display: 'flex' }}>
+              {/* Lista */}
+              <div style={{ width: 300, flexShrink: 0, borderRight: `1px solid ${BORDER}`, overflowY: 'auto', background: SURFACE }}>
+                <div style={{ padding: 12, borderBottom: `1px solid ${BORDER}` }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: SUBTLE }} />
+                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Pesquisar..." style={{ width: '100%', paddingLeft: 32, paddingRight: 12, paddingTop: 7, paddingBottom: 7, fontSize: 13, borderRadius: 8, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.04)', color: TEXT, outline: 'none', boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                   </div>
                 </div>
-                {leads
-                  .filter(l => l.message_count > 0 && (
-                    !searchTerm || l.name.toLowerCase().includes(searchTerm.toLowerCase())
-                  ))
-                  .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
-                  .map(lead => {
-                    const stage = stageById(lead.stage);
-                    const color = stageColor(stage);
-                    const isActive = convLeadId === lead.id;
-                    return (
-                      <div
-                        key={lead.id}
-                        onClick={() => setConvLeadId(lead.id)}
-                        className="flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-black/4 hover:bg-gray-50 transition-colors"
-                        style={{ backgroundColor: isActive ? PRIMARY + '10' : undefined, borderLeft: isActive ? `3px solid ${PRIMARY}` : '3px solid transparent' }}
-                      >
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: color }}>
-                          {lead.name.split(' ').map(p => p[0]).slice(0,2).join('')}
+                {leads.filter(l => l.message_count > 0 && (!searchTerm || l.name.toLowerCase().includes(searchTerm.toLowerCase()))).sort((a, b) => (b.message_count || 0) - (a.message_count || 0)).map(lead => {
+                  const stage = stageById(lead.stage);
+                  const color = stageColor(stage);
+                  const isActive = convLeadId === lead.id;
+                  return (
+                    <div key={lead.id} onClick={() => setConvLeadId(lead.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', borderBottom: `1px solid ${BORDER}`, borderLeft: `2px solid ${isActive ? PRIMARY : 'transparent'}`, background: isActive ? 'rgba(99,102,241,0.08)' : 'transparent', transition: 'background 0.15s' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12, flexShrink: 0, background: color }}>
+                        {lead.name.split(' ').map(p => p[0]).slice(0,2).join('')}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: TEXT }}>{lead.name}</p>
+                          <span style={{ fontSize: 10, color: SUBTLE, flexShrink: 0, marginLeft: 4 }}>{formatDate(lead.created_at)}</span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-sm truncate">{lead.name}</p>
-                            <span className="text-[10px] text-gray-400 flex-shrink-0 ml-1">{formatDate(lead.created_at)}</span>
-                          </div>
-                          <p className="text-xs text-gray-400 truncate mt-0.5">{lead.last_message || 'Sem mensagens'}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: color + '22', color }}>{stage.name}</span>
-                            <span className="text-[10px] text-gray-300">{lead.message_count} msg</span>
-                          </div>
+                        <p style={{ fontSize: 11, color: SUBTLE, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.last_message || 'Sem mensagens'}</p>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: color + '22', color }}>{stage.name}</span>
+                          <span style={{ fontSize: 10, color: '#334155' }}>{lead.message_count} msg</span>
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                })}
                 {leads.filter(l => l.message_count > 0).length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                    <MessageSquare size={32} className="text-gray-200 mb-3" />
-                    <p className="text-sm font-semibold text-gray-400">Sem conversas ainda</p>
-                    <p className="text-xs text-gray-300 mt-1">Conversas criadas via WhatsApp aparecem aqui</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 240, textAlign: 'center', padding: '0 24px' }}>
+                    <MessageSquare size={32} style={{ color: SUBTLE, marginBottom: 12 }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: MUTED, margin: 0 }}>Sem conversas ainda</p>
+                    <p style={{ fontSize: 12, color: SUBTLE, margin: '4px 0 0' }}>Conversas via WhatsApp aparecem aqui</p>
                   </div>
                 )}
               </div>
 
-              {/* Painel de chat */}
+              {/* Chat panel */}
               {convLeadId ? (() => {
                 const lead = leads.find(l => l.id === convLeadId);
                 if (!lead) return null;
                 return (
-                  <div className="flex-1 flex flex-col h-full">
-                    {/* Header do chat */}
-                    <div className="px-5 py-3 border-b border-black/5 bg-white flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: PRIMARY }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, background: SURFACE, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12 }}>
                           {lead.name.split(' ').map(p => p[0]).slice(0,2).join('')}
                         </div>
                         <div>
-                          <p className="font-semibold text-sm">{lead.name}</p>
-                          <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: TEXT }}>{lead.name}</p>
+                          <p style={{ fontSize: 11, color: SUBTLE, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Phone size={10} /> {formatPhone(lead.phone) || 'Sem telefone'}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs px-2 py-1 rounded-full" style={{ background: stageColor(stageById(lead.stage)) + '22', color: stageColor(stageById(lead.stage)) }}>
-                          {stageById(lead.stage).name}
-                        </span>
-                        <button onClick={() => setSelectedLeadId(lead.id)} className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 border border-gray-200 rounded-lg px-2 py-1">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: stageColor(stageById(lead.stage)) + '22', color: stageColor(stageById(lead.stage)) }}>{stageById(lead.stage).name}</span>
+                        <button onClick={() => setSelectedLeadId(lead.id)} style={{ fontSize: 11, color: SUBTLE, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                           Ver lead <ChevronRight size={11} />
                         </button>
                       </div>
                     </div>
-                    {/* Mensagens */}
-                    <div className="flex-1 overflow-y-auto pulso-scroll p-4 space-y-3 bg-[#F5F6FA]">
+                    <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, background: BG }}>
                       {(lead.messages || []).map(m => {
-                        if (m.from_type === 'system') return (
-                          <div key={m.id} className="text-center text-[11px] text-gray-400 italic">{m.text}</div>
-                        );
+                        if (m.from_type === 'system') return <div key={m.id} style={{ textAlign: 'center', fontSize: 11, color: SUBTLE, fontStyle: 'italic' }}>{m.text}</div>;
                         const mine = m.from_type === 'me';
                         return (
-                          <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[70%] rounded-xl px-3 py-2 text-sm ${mine ? 'text-white rounded-br-sm' : 'bg-white text-gray-800 rounded-bl-sm border border-gray-100'}`} style={mine ? { backgroundColor: PRIMARY } : {}}>
-                              <p>{m.text}</p>
+                          <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+                            <div style={{ maxWidth: '70%', borderRadius: 12, padding: '8px 12px', fontSize: 13, background: mine ? PRIMARY : SURFACE, color: mine ? '#fff' : TEXT, border: mine ? 'none' : `1px solid ${BORDER}`, borderBottomRightRadius: mine ? 3 : 12, borderBottomLeftRadius: mine ? 12 : 3 }}>
+                              <p style={{ margin: 0 }}>{m.text}</p>
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                    {/* Input */}
                     {templates.length > 0 && (
-                      <div className="px-3 pt-2 bg-white relative">
-                        <button onClick={() => setShowTemplatesDropdown(v => !v)} className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1">
+                      <div style={{ padding: '8px 12px 0', background: SURFACE, position: 'relative' }}>
+                        <button onClick={() => setShowTemplatesDropdown(v => !v)} style={{ fontSize: 11, color: SUBTLE, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                           📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
                         </button>
                         {showTemplatesDropdown && (
-                          <div className="absolute bottom-8 left-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-72 max-h-48 overflow-y-auto">
+                          <div style={{ position: 'absolute', bottom: 32, left: 12, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
                             {templates.map(t => (
-                              <button key={t.id} onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                                <p className="text-xs font-semibold text-gray-700">{t.name}</p>
-                                <p className="text-xs text-gray-400 truncate">{t.text}</p>
+                              <button key={t.id} onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                                <p style={{ fontSize: 12, fontWeight: 600, color: TEXT, margin: 0 }}>{t.name}</p>
+                                <p style={{ fontSize: 11, color: SUBTLE, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
                     )}
-                    <div className="p-3 border-t border-black/5 bg-white flex items-center gap-2">
-                      <input
-                        value={chatInput}
-                        onChange={e => setChatInput(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            if (!chatInput.trim() || !convLeadId) return;
-                            const text = chatInput.trim();
-                            setChatInput('');
-                            apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
-                              .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
-                              .catch(err => addToast(`Erro: ${err.message}`));
-                          }
-                        }}
-                        placeholder="Escreva uma mensagem..."
-                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]"
-                      />
-                      <button
-                        onClick={() => {
+                    <div style={{ padding: 12, borderTop: `1px solid ${BORDER}`, background: SURFACE, display: 'flex', gap: 8 }}>
+                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => {
+                        if (e.key === 'Enter') {
                           if (!chatInput.trim() || !convLeadId) return;
-                          const text = chatInput.trim();
-                          setChatInput('');
+                          const text = chatInput.trim(); setChatInput('');
                           apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
                             .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
                             .catch(err => addToast(`Erro: ${err.message}`));
-                        }}
-                        className="w-9 h-9 rounded-lg text-white flex items-center justify-center" style={{ backgroundColor: PRIMARY }}
-                      >
-                        <Send size={15} />
+                        }
+                      }} placeholder="Escreva uma mensagem..." className="pulso-input" style={{ flex: 1 }} />
+                      <button onClick={() => {
+                        if (!chatInput.trim() || !convLeadId) return;
+                        const text = chatInput.trim(); setChatInput('');
+                        apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
+                          .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
+                          .catch(err => addToast(`Erro: ${err.message}`));
+                      }} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                        <Send size={14} />
                       </button>
                     </div>
                   </div>
                 );
               })() : (
-                <div className="flex-1 flex flex-col items-center justify-center bg-[#F5F6FA] text-center">
-                  <MessageSquare size={48} className="text-gray-200 mb-4" />
-                  <p className="text-base font-bold text-gray-400">Conversas</p>
-                  <p className="text-sm text-gray-300 mt-1">Acompanhe as conversas com seus leads</p>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: BG, textAlign: 'center' }}>
+                  <MessageSquare size={48} style={{ color: '#1E293B', marginBottom: 16 }} />
+                  <p style={{ fontSize: 15, fontWeight: 700, color: MUTED, margin: 0 }}>Conversas</p>
+                  <p style={{ fontSize: 13, color: SUBTLE, margin: '6px 0 0' }}>Selecione uma conversa para começar</p>
                 </div>
               )}
             </div>
           )}
 
+          {/* Pipeline */}
           {view === "pipeline" && (
-            <div className="h-full overflow-x-auto pulso-scroll p-5 flex gap-4">
+            <div style={{ height: '100%', overflowX: 'auto', padding: 16, display: 'flex', gap: 12 }}>
               {STAGES.map((stage) => {
                 const stageLeads = filteredLeads.filter((l) => l.stage === stage.id);
                 const total = stageLeads.reduce((s, l) => s + l.value, 0);
                 const color = stageColor(stage);
                 return (
-                  <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)} className="w-72 flex-shrink-0 flex flex-col bg-white/70 rounded-xl border border-black/5">
-                    <div className="px-3 py-3 border-b border-black/5 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                        <span className="font-semibold text-sm">{stage.name}</span>
-                        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">{stageLeads.length}</span>
-                      </div>
+                  <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)} style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                    <div style={{ padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 8px ${color}88` }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: TEXT, flex: 1 }}>{stage.name}</span>
+                      <span style={{ fontSize: 11, color: SUBTLE, background: 'rgba(255,255,255,0.06)', borderRadius: 99, padding: '1px 7px' }}>{stageLeads.length}</span>
                     </div>
-                    <div className="px-3 pt-2 pb-1 text-xs text-gray-400 pulso-mono">{formatBRL(total)}</div>
-                    <div className="flex-1 overflow-y-auto pulso-scroll p-2 space-y-2 min-h-[120px]">
+                    <div style={{ padding: '6px 8px 4px', fontSize: 11, color: SUBTLE }} className="pulso-mono">{formatBRL(total)}</div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 100 }}>
                       {stageLeads.map((lead) => (
                         <LeadCard key={lead.id} lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
                       ))}
                       {stageLeads.length === 0 && (
-                        <div className="text-xs text-gray-300 text-center py-6 border border-dashed border-gray-200 rounded-lg">Solte um lead aqui</div>
+                        <div style={{ fontSize: 11, color: SUBTLE, textAlign: 'center', padding: '20px 0', border: `1px dashed ${BORDER}`, borderRadius: 8, marginTop: 4 }}>Solte um lead aqui</div>
                       )}
                     </div>
                   </div>
@@ -964,18 +713,16 @@ export default function PulsoCRM() {
             </div>
           )}
 
+          {/* Contatos */}
           {view === "contatos" && (
-            <div className="h-full overflow-y-auto pulso-scroll p-5">
-              <div className="bg-white rounded-xl border border-black/5 overflow-hidden">
-                <table className="w-full text-sm">
+            <div style={{ height: '100%', overflowY: 'auto', padding: 16 }}>
+              <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                      <th className="text-left font-semibold px-4 py-3">Nome</th>
-                      <th className="text-left font-semibold px-4 py-3">Contato</th>
-                      <th className="text-left font-semibold px-4 py-3">Tags</th>
-                      <th className="text-left font-semibold px-4 py-3">Valor</th>
-                      <th className="text-left font-semibold px-4 py-3">Etapa</th>
-                      <th className="text-left font-semibold px-4 py-3">Criado</th>
+                    <tr style={{ borderBottom: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}>
+                      {['Nome','Contato','Tags','Valor','Etapa','Criado'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600, color: SUBTLE, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -984,55 +731,47 @@ export default function PulsoCRM() {
                       const color = stageColor(stage);
                       const initials = lead.name.split(' ').map(p => p[0]).slice(0,2).join('');
                       return (
-                        <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0" style={{ backgroundColor: color }}>
-                                {initials}
-                              </div>
+                        <tr key={lead.id} onClick={() => setSelectedLeadId(lead.id)} style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', transition: 'background 0.1s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
                               <div>
-                                <p className="font-semibold text-sm">{lead.name}</p>
-                                <p className="text-xs text-gray-400">Ticket: {formatBRL(lead.value)}</p>
+                                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: TEXT }}>{lead.name}</p>
+                                <p style={{ fontSize: 11, color: SUBTLE, margin: 0 }}>Ticket: {formatBRL(lead.value)}</p>
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-500" onClick={e => e.stopPropagation()}>
+                          <td style={{ padding: '10px 14px', color: MUTED }} onClick={e => e.stopPropagation()}>
                             {editingLeadField?.field === 'phone' && editingLeadField?.id === lead.id ? (
-                              <div className="flex items-center gap-1">
-                                <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9] w-40"
-                                  defaultValue={(lead.phone || "").replace(/\D/g, '')}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <input type="text" autoFocus className="pulso-input" style={{ fontSize: 12, width: 160 }} defaultValue={(lead.phone || "").replace(/\D/g, '')}
                                   onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(lead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
-                                <button onClick={(e) => { updateLead(lead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} className="text-green-500"><Check size={12} /></button>
+                                <button onClick={(e) => { updateLead(lead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS }}><Check size={13} /></button>
                               </div>
                             ) : (
-                              <span onClick={() => setEditingLeadField({ field: 'phone', id: lead.id })} className="cursor-pointer hover:text-gray-800 group flex items-center gap-1 text-sm">
-                                <Phone size={12} className="text-gray-300" />
-                                {formatPhone(lead.phone) || <span className="text-gray-300 italic text-xs">clique para editar</span>}
-                                <Edit2 size={10} className="opacity-0 group-hover:opacity-100 text-gray-400" />
+                              <span onClick={() => setEditingLeadField({ field: 'phone', id: lead.id })} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                                <Phone size={12} style={{ color: SUBTLE }} />
+                                {formatPhone(lead.phone) || <span style={{ color: SUBTLE, fontStyle: 'italic', fontSize: 11 }}>clique para editar</span>}
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {(lead.tags || []).map(tag => (
-                                <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>{tag}</span>
-                              ))}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {(lead.tags || []).map(tag => <span key={tag} style={{ padding: '2px 7px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: color + '22', color }}>{tag}</span>)}
                             </div>
                           </td>
-                          <td className="px-4 py-3 pulso-mono text-sm">{formatBRL(lead.value)}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: color + "22", color }}>
-                              {stage.name}
-                            </span>
+                          <td style={{ padding: '10px 14px' }} className="pulso-mono">{formatBRL(lead.value)}</td>
+                          <td style={{ padding: '10px 14px' }}>
+                            <span style={{ padding: '3px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: color + '22', color }}>{stage.name}</span>
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-400">{formatDate(lead.created_at)}</td>
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: SUBTLE }}>{formatDate(lead.created_at)}</td>
                         </tr>
                       );
                     })}
                     {filteredLeads.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="text-center text-gray-300 text-sm py-8">Nenhum lead ainda. Crie o primeiro com "Novo Lead".</td>
-                      </tr>
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: SUBTLE, fontSize: 13, padding: '32px 0' }}>Nenhum lead ainda. Crie o primeiro com "Novo Lead".</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1040,69 +779,63 @@ export default function PulsoCRM() {
             </div>
           )}
 
+          {/* Automações */}
           {view === "automacoes" && (
-            <div className="h-full overflow-y-auto pulso-scroll p-6">
+            <div style={{ height: '100%', overflowY: 'auto', padding: 20 }}>
               {automations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#EDE9FE,#DDD6FE)' }}>
-                    <Zap size={28} style={{ color: PRIMARY }} />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, textAlign: 'center' }}>
+                  <div style={{ width: 60, height: 60, borderRadius: 16, background: 'rgba(99,102,241,0.12)', border: `1px solid rgba(99,102,241,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Zap size={26} strokeWidth={1.5} style={{ color: PRIMARY }} />
                   </div>
                   <div>
-                    <p className="font-bold text-base" style={{ color: INK }}>Nenhuma automação ainda</p>
-                    <p className="text-sm text-gray-400 mt-1">Crie sua primeira automação para trabalhar no piloto automático</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: 0 }}>Nenhuma automação ainda</p>
+                    <p style={{ fontSize: 13, color: SUBTLE, margin: '4px 0 0' }}>Crie sua primeira automação para trabalhar no piloto automático</p>
                   </div>
-                  <button onClick={openNewAutomation} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md" style={{ backgroundColor: PRIMARY }}>
-                    <Plus size={15} /> Criar primeira automação
+                  <button onClick={openNewAutomation} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <Plus size={14} /> Criar primeira automação
                   </button>
                 </div>
               ) : (
-                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+                <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                   {automations.map((auto) => <AutomationCard key={auto.id} auto={auto} onToggle={() => toggleAutomation(auto)} onDelete={() => deleteAutomation(auto.id)} onEdit={() => openEditAutomation(auto)} />)}
                 </div>
               )}
             </div>
           )}
 
+          {/* WhatsApp */}
           {view === 'whatsapp' && (
-            <div style={{ padding: '32px', maxWidth: 480, margin: '0 auto' }}>
-              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: INK }}>WhatsApp</h2>
-              <p style={{ color: '#6B7280', marginBottom: 24, fontSize: 14 }}>
-                Conecte seu WhatsApp para enviar e receber mensagens dos leads diretamente no CRM.
-              </p>
+            <div style={{ padding: 32, maxWidth: 460, margin: '0 auto' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: TEXT }}>WhatsApp</h2>
+              <p style={{ color: SUBTLE, marginBottom: 28, fontSize: 13 }}>Conecte seu WhatsApp para enviar e receber mensagens dos leads diretamente no CRM.</p>
 
               {waStatus === 'disconnected' && (
-                <button
-                  onClick={connectWhatsApp}
-                  style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <Smartphone size={18} /> Conectar WhatsApp
+                <button onClick={connectWhatsApp} style={{ background: '#16A34A', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <Smartphone size={16} /> Conectar WhatsApp
                 </button>
               )}
 
               {waStatus === 'qr' && waQr && (
                 <div style={{ textAlign: 'center' }}>
-                  <p style={{ marginBottom: 12, fontWeight: 600, color: INK }}>Escaneie o QR Code com seu WhatsApp</p>
-                  <img src={waQr} alt="QR Code WhatsApp" style={{ width: 260, height: 260, borderRadius: 12, border: '2px solid #e5e7eb' }} />
-                  <p style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF' }}>Atualizando automaticamente...</p>
+                  <p style={{ marginBottom: 14, fontWeight: 600, color: TEXT }}>Escaneie o QR Code com seu WhatsApp</p>
+                  <img src={waQr} alt="QR Code WhatsApp" style={{ width: 240, height: 240, borderRadius: 12, border: `1px solid ${BORDER}` }} />
+                  <p style={{ marginTop: 10, fontSize: 12, color: SUBTLE }}>Atualizando automaticamente...</p>
                 </div>
               )}
 
               {waStatus === 'connecting' && (
-                <div style={{ color: '#6B7280', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ color: MUTED, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Loader2 size={18} className="animate-spin" /> Conectando...
                 </div>
               )}
 
               {waStatus === 'open' && (
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '12px 16px' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                    <span style={{ fontWeight: 600, color: '#166534' }}>WhatsApp conectado!</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 10, padding: '12px 16px' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: SUCCESS, display: 'inline-block', boxShadow: `0 0 8px ${SUCCESS}` }} />
+                    <span style={{ fontWeight: 600, color: SUCCESS, fontSize: 14 }}>WhatsApp conectado!</span>
                   </div>
-                  <button
-                    onClick={disconnectWhatsApp}
-                    style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                  >
+                  <button onClick={disconnectWhatsApp} style={{ background: 'rgba(244,63,94,0.1)', color: DANGER, border: `1px solid rgba(244,63,94,0.2)`, borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     Desconectar
                   </button>
                 </div>
@@ -1110,115 +843,65 @@ export default function PulsoCRM() {
             </div>
           )}
 
+          {/* Configurações */}
           {view === 'configuracoes' && (
-            <div style={{ padding: '32px', maxWidth: 520, margin: '0 auto' }}>
-              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, color: INK }}>Configurações</h2>
-              <p style={{ color: '#6B7280', marginBottom: 28, fontSize: 14 }}>Integre seu Pixel do Facebook para rastrear leads automaticamente.</p>
+            <div style={{ padding: 28, maxWidth: 520, margin: '0 auto', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: TEXT }}>Configurações</h2>
+              <p style={{ color: SUBTLE, marginBottom: 24, fontSize: 13 }}>Integre seu Pixel do Facebook para rastrear leads automaticamente.</p>
 
-              <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: INK }}>Meta Pixel + Conversions API</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>
-                  Quando um lead é criado (manual ou via WhatsApp), disparamos automaticamente um evento <strong>Lead</strong> para o seu Pixel.
-                </p>
+              <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: TEXT }}>Meta Pixel + Conversions API</h3>
+                <p style={{ fontSize: 12, color: SUBTLE, marginBottom: 18 }}>Quando um lead é criado (manual ou via WhatsApp), disparamos automaticamente um evento <strong style={{ color: MUTED }}>Lead</strong> para o seu Pixel.</p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Pixel ID</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 1234567890123456"
-                      value={settingsForm.pixel_id}
-                      onChange={e => setSettingsForm(f => ({ ...f, pixel_id: e.target.value }))}
-                      style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
-                      Token da API de Conversões
-                      {settings.capi_token_set && <span style={{ marginLeft: 8, color: '#16A34A', fontWeight: 400 }}>✓ configurado</span>}
-                    </label>
-                    <input
-                      type="password"
-                      placeholder={settings.capi_token_set ? '••••••••••••• (deixe em branco para manter)' : 'Cole o token aqui'}
-                      value={settingsForm.capi_token}
-                      onChange={e => setSettingsForm(f => ({ ...f, capi_token: e.target.value }))}
-                      style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-                    />
-                    <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
-                      Encontre em: Gerenciador de Eventos → Configurações → API de Conversões → Gerar token de acesso
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      setSettingsSaving(true);
-                      try {
-                        const body = { pixel_id: settingsForm.pixel_id };
-                        if (settingsForm.capi_token) body.capi_token = settingsForm.capi_token;
-                        const updated = await apiFetch('/settings', { method: 'PUT', body: JSON.stringify(body) });
-                        setSettings(updated);
-                        setSettingsForm(f => ({ ...f, capi_token: '' }));
-                        if (updated.pixel_id) loadFbPixel(updated.pixel_id);
-                        addToast('Configurações salvas!');
-                      } catch (err) {
-                        addToast(`Erro: ${err.message}`);
-                      } finally {
-                        setSettingsSaving(false);
-                      }
-                    }}
-                    disabled={settingsSaving}
-                    style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: settingsSaving ? 0.7 : 1 }}
-                  >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <Field label="Pixel ID">
+                    <input type="text" placeholder="Ex: 1234567890123456" value={settingsForm.pixel_id} onChange={e => setSettingsForm(f => ({ ...f, pixel_id: e.target.value }))} className="pulso-input" />
+                  </Field>
+                  <Field label={<span>Token da API de Conversões {settings.capi_token_set && <span style={{ marginLeft: 8, color: SUCCESS, fontWeight: 400 }}>✓ configurado</span>}</span>}>
+                    <input type="password" placeholder={settings.capi_token_set ? '••••••••••••• (deixe em branco para manter)' : 'Cole o token aqui'} value={settingsForm.capi_token} onChange={e => setSettingsForm(f => ({ ...f, capi_token: e.target.value }))} className="pulso-input" />
+                    <p style={{ fontSize: 11, color: SUBTLE, marginTop: 4 }}>Encontre em: Gerenciador de Eventos → Configurações → API de Conversões → Gerar token de acesso</p>
+                  </Field>
+                  <button onClick={async () => {
+                    setSettingsSaving(true);
+                    try {
+                      const body = { pixel_id: settingsForm.pixel_id };
+                      if (settingsForm.capi_token) body.capi_token = settingsForm.capi_token;
+                      const updated = await apiFetch('/settings', { method: 'PUT', body: JSON.stringify(body) });
+                      setSettings(updated); setSettingsForm(f => ({ ...f, capi_token: '' }));
+                      if (updated.pixel_id) loadFbPixel(updated.pixel_id);
+                      addToast('Configurações salvas!');
+                    } catch (err) { addToast(`Erro: ${err.message}`); } finally { setSettingsSaving(false); }
+                  }} disabled={settingsSaving} style={{ background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: settingsSaving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif", alignSelf: 'flex-start' }}>
                     {settingsSaving ? 'Salvando...' : 'Salvar configurações'}
                   </button>
                 </div>
               </div>
 
               {settings.pixel_id && (
-                <div style={{ marginTop: 16, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#166534' }}>
+                <div style={{ marginTop: 12, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: SUCCESS }}>
                   ✓ Pixel <strong>{settings.pixel_id}</strong> ativo — eventos <code>Lead</code> sendo disparados ao criar contatos.
                 </div>
               )}
 
-              {/* Templates de mensagem */}
-              <div style={{ marginTop: 32 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: INK }}>Templates de Mensagem</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>Respostas rápidas disponíveis no chat de cada lead.</p>
-
-                <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Templates */}
+              <div style={{ marginTop: 28 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: TEXT }}>Templates de Mensagem</h3>
+                <p style={{ fontSize: 12, color: SUBTLE, marginBottom: 14 }}>Respostas rápidas disponíveis no chat de cada lead.</p>
+                <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {templates.map(t => (
-                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 2 }}>{t.name}</p>
-                        <p style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: TEXT, marginBottom: 2 }}>{t.name}</p>
+                        <p style={{ fontSize: 11, color: SUBTLE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
                       </div>
-                      <button onClick={() => deleteTemplate(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: 0, flexShrink: 0 }} title="Excluir">
-                        <X size={15} />
-                      </button>
+                      <button onClick={() => deleteTemplate(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, flexShrink: 0 }}><X size={14} /></button>
                     </div>
                   ))}
-                  {templates.length === 0 && <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>Nenhum template ainda.</p>}
-
-                  <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <input
-                      placeholder="Nome do template (ex: Boas-vindas)"
-                      value={templateForm.name}
-                      onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))}
-                      style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none' }}
-                    />
-                    <textarea
-                      placeholder="Texto da mensagem... use {nome}, {empresa}"
-                      value={templateForm.text}
-                      onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))}
-                      rows={3}
-                      style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }}
-                    />
-                    <button
-                      onClick={saveTemplate}
-                      disabled={templateSaving || !templateForm.name || !templateForm.text}
-                      style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (templateSaving || !templateForm.name || !templateForm.text) ? 0.6 : 1, alignSelf: 'flex-start' }}
-                    >
+                  {templates.length === 0 && <p style={{ fontSize: 12, color: SUBTLE, textAlign: 'center' }}>Nenhum template ainda.</p>}
+                  <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input placeholder="Nome do template" value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} className="pulso-input" />
+                    <textarea placeholder="Texto da mensagem... use {nome}, {empresa}" value={templateForm.text} onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))} rows={3} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', resize: 'vertical', background: 'rgba(255,255,255,0.04)', color: TEXT, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                    <button onClick={saveTemplate} disabled={templateSaving || !templateForm.name || !templateForm.text} style={{ background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (templateSaving || !templateForm.name || !templateForm.text) ? 0.5 : 1, alignSelf: 'flex-start', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       {templateSaving ? 'Salvando...' : '+ Adicionar template'}
                     </button>
                   </div>
@@ -1230,143 +913,104 @@ export default function PulsoCRM() {
         </main>
       </div>
 
-      {/* Chat drawer — só aparece fora da view conversas */}
+      {/* Lead drawer */}
       {selectedLead && view !== 'conversas' && (
-        <div className="fixed inset-0 z-40 flex justify-end">
-          <div className="absolute inset-0 bg-black/20" onClick={() => setSelectedLeadId(null)} />
-          <div className="relative w-96 h-full bg-white shadow-2xl flex flex-col">
-            <div className="px-4 py-4 border-b border-black/5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: PRIMARY }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setSelectedLeadId(null)} />
+          <div style={{ position: 'relative', width: 380, height: '100%', background: SURFACE, borderLeft: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', boxShadow: '-24px 0 64px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
                     {selectedLead.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
                   </div>
                   <div>
-                    <p className="font-semibold text-sm">{selectedLead.name}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: TEXT }}>{selectedLead.name}</p>
                     {editingLeadField?.field === 'phone' ? (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <input type="text" autoFocus className="text-xs border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-[#4F3CC9] w-36"
-                          defaultValue={(selectedLead.phone || "").replace(/@.*$/, "")}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <input type="text" autoFocus className="pulso-input" style={{ fontSize: 12, width: 140 }} defaultValue={(selectedLead.phone || "").replace(/@.*$/, "")}
                           onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(selectedLead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
-                        <button onClick={(e) => { updateLead(selectedLead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} className="text-green-500"><Check size={12} /></button>
+                        <button onClick={(e) => { updateLead(selectedLead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS }}><Check size={13} /></button>
                       </div>
                     ) : (
-                      <button onClick={() => setEditingLeadField({ field: 'phone' })} className="text-xs text-gray-400 flex items-center gap-1 hover:text-gray-700 group">
-                        <Phone size={11} /> {formatPhone(selectedLead.phone) || 'Sem telefone'}
-                        <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <button onClick={() => setEditingLeadField({ field: 'phone' })} style={{ fontSize: 11, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
+                        <Phone size={10} /> {formatPhone(selectedLead.phone) || 'Sem telefone'}
+                        <Edit2 size={9} style={{ opacity: 0.5 }} />
                       </button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => deleteLead(selectedLead.id)} className="text-gray-300 hover:text-red-500 p-1" title="Excluir lead">
-                    <Trash2 size={15} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button onClick={() => deleteLead(selectedLead.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6 }} title="Excluir lead">
+                    <Trash2 size={14} />
                   </button>
-                  <button onClick={() => setSelectedLeadId(null)} className="text-gray-300 hover:text-gray-600 p-1">
-                    <X size={18} />
+                  <button onClick={() => setSelectedLeadId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6 }}>
+                    <X size={16} />
                   </button>
                 </div>
               </div>
-              {/* Inline value editor */}
-              <div className="mt-3 flex items-center gap-2">
-                <DollarSign size={13} className="text-gray-400" />
+
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <DollarSign size={12} style={{ color: SUBTLE }} />
                 {editingLeadField?.field === 'value' ? (
-                  <div className="flex items-center gap-1 flex-1">
-                    <input
-                      type="number"
-                      autoFocus
-                      className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#4F3CC9]"
-                      defaultValue={selectedLead.value || 0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          updateLead(selectedLead.id, { value: Number(e.target.value) });
-                          setEditingLeadField(null);
-                        }
-                        if (e.key === 'Escape') setEditingLeadField(null);
-                      }}
-                    />
-                    <button
-                      onClick={(e) => {
-                        const input = e.currentTarget.previousSibling;
-                        updateLead(selectedLead.id, { value: Number(input.value) });
-                        setEditingLeadField(null);
-                      }}
-                      className="text-green-500 hover:text-green-700"
-                    >
-                      <Check size={14} />
-                    </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <input type="number" autoFocus className="pulso-input" style={{ flex: 1, fontSize: 13 }} defaultValue={selectedLead.value || 0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(selectedLead.id, { value: Number(e.target.value) }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
+                    <button onClick={(e) => { const input = e.currentTarget.previousSibling; updateLead(selectedLead.id, { value: Number(input.value) }); setEditingLeadField(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS }}><Check size={14} /></button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setEditingLeadField({ field: 'value', value: selectedLead.value })}
-                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 group"
-                  >
-                    <span className="font-semibold pulso-mono" style={{ color: PRIMARY }}>{formatBRL(selectedLead.value)}</span>
-                    <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" />
+                  <button onClick={() => setEditingLeadField({ field: 'value', value: selectedLead.value })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <span className="pulso-mono" style={{ fontSize: 14, fontWeight: 700, color: PRIMARY }}>{formatBRL(selectedLead.value)}</span>
+                    <Edit2 size={10} style={{ color: SUBTLE, opacity: 0.6 }} />
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2 text-xs text-gray-400">
-              <Building2 size={12} /> {selectedLead.company_name}
-              <span className="mx-1">·</span>
-              <MessageCircle size={12} /> WhatsApp
+            <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: SUBTLE }}>
+              <Building2 size={11} /> {selectedLead.company_name}
+              <span style={{ margin: '0 4px' }}>·</span>
+              <MessageCircle size={11} /> WhatsApp
             </div>
 
             {/* Tags */}
-            <div className="px-4 py-2 border-b border-black/5 flex flex-wrap items-center gap-1.5">
+            <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
               {(selectedLead.tags || []).map(tag => (
-                <span key={tag} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: PRIMARY + '22', color: PRIMARY }}>
+                <span key={tag} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: PRIMARY + '22', color: '#818CF8' }}>
                   {tag}
-                  <button onClick={() => updateLead(selectedLead.id, { tags: (selectedLead.tags || []).filter(t => t !== tag) })} className="hover:text-red-500 leading-none">×</button>
+                  <button onClick={() => updateLead(selectedLead.id, { tags: (selectedLead.tags || []).filter(t => t !== tag) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, lineHeight: 1 }}>×</button>
                 </span>
               ))}
-              <TagInput onAdd={tag => {
-                const current = selectedLead.tags || [];
-                if (!current.includes(tag)) updateLead(selectedLead.id, { tags: [...current, tag] });
-              }} />
+              <TagInput onAdd={tag => { const current = selectedLead.tags || []; if (!current.includes(tag)) updateLead(selectedLead.id, { tags: [...current, tag] }); }} />
             </div>
 
-            <div className="flex-1 overflow-y-auto pulso-scroll p-4 space-y-3 bg-[#F5F6FA]">
+            {/* Messages */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, background: BG }}>
               {selectedLead.messages.map((m) => {
-                if (m.from_type === "system") {
-                  return (
-                    <div key={m.id} className="text-center text-[11px] text-gray-400 italic">
-                      {m.text}
-                    </div>
-                  );
-                }
+                if (m.from_type === "system") return <div key={m.id} style={{ textAlign: 'center', fontSize: 11, color: SUBTLE, fontStyle: 'italic' }}>{m.text}</div>;
                 const mine = m.from_type === "me";
                 return (
-                  <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${mine ? "text-white rounded-br-sm" : "bg-white text-gray-800 rounded-bl-sm border border-gray-100"}`} style={mine ? { backgroundColor: PRIMARY } : {}}>
-                      <p>{m.text}</p>
+                  <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+                    <div style={{ maxWidth: '75%', borderRadius: 12, padding: '8px 12px', fontSize: 13, background: mine ? PRIMARY : SURFACE, color: mine ? '#fff' : TEXT, border: mine ? 'none' : `1px solid ${BORDER}`, borderBottomRightRadius: mine ? 3 : 12, borderBottomLeftRadius: mine ? 12 : 3 }}>
+                      <p style={{ margin: 0 }}>{m.text}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Templates dropdown */}
+            {/* Templates */}
             {templates.length > 0 && (
-              <div className="px-3 pt-2 relative">
-                <button
-                  onClick={() => setShowTemplatesDropdown(v => !v)}
-                  className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1"
-                >
+              <div style={{ padding: '8px 12px 0', background: SURFACE, position: 'relative' }}>
+                <button onClick={() => setShowTemplatesDropdown(v => !v)} style={{ fontSize: 11, color: SUBTLE, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                   📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
                 </button>
                 {showTemplatesDropdown && (
-                  <div className="absolute bottom-8 left-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-72 max-h-48 overflow-y-auto">
+                  <div style={{ position: 'absolute', bottom: 32, left: 12, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
                     {templates.map(t => (
-                      <button
-                        key={t.id}
-                        onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                      >
-                        <p className="text-xs font-semibold text-gray-700">{t.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{t.text}</p>
+                      <button key={t.id} onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: TEXT, margin: 0 }}>{t.name}</p>
+                        <p style={{ fontSize: 11, color: SUBTLE, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
                       </button>
                     ))}
                   </div>
@@ -1374,16 +1018,10 @@ export default function PulsoCRM() {
               </div>
             )}
 
-            <div className="p-3 border-t border-black/5 flex items-center gap-2">
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder="Escreva uma mensagem..."
-                className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#4F3CC9]"
-              />
-              <button onClick={sendMessage} className="w-9 h-9 rounded-lg text-white flex items-center justify-center flex-shrink-0" style={{ backgroundColor: PRIMARY }}>
-                <Send size={15} />
+            <div style={{ padding: 12, borderTop: `1px solid ${BORDER}`, background: SURFACE, display: 'flex', gap: 8 }}>
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Escreva uma mensagem..." className="pulso-input" style={{ flex: 1 }} />
+              <button onClick={sendMessage} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <Send size={14} />
               </button>
             </div>
           </div>
@@ -1405,38 +1043,33 @@ export default function PulsoCRM() {
           <Field label="Valor estimado (R$)">
             <input value={newLeadForm.value} onChange={(e) => setNewLeadForm({ ...newLeadForm, value: e.target.value })} type="number" className="pulso-input" placeholder="0" />
           </Field>
-          <button onClick={addLead} className="w-full mt-2 py-2.5 rounded-lg text-white text-sm font-semibold" style={{ backgroundColor: PRIMARY }}>
+          <button onClick={addLead} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Criar lead
           </button>
         </Modal>
       )}
 
-      {/* Modal de preview CSV */}
+      {/* CSV preview modal */}
       {importPreview && (
         <Modal onClose={() => setImportPreview(null)} title={`Importar CSV — ${importPreview.fileName}`}>
-          <p className="text-sm text-gray-500">{importPreview.rows.length} leads encontrados. Colunas aceitas: <span className="font-mono text-xs">name, company_name, phone, value</span></p>
-          <div className="max-h-40 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+          <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>{importPreview.rows.length} leads encontrados. Colunas aceitas: <span className="pulso-mono" style={{ fontSize: 12 }}>name, company_name, phone, value</span></p>
+          <div style={{ maxHeight: 160, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8 }}>
             {importPreview.rows.slice(0, 8).map((r, i) => (
-              <div key={i} className="px-3 py-1.5 text-xs text-gray-700 flex gap-3">
-                <span className="font-semibold w-32 truncate">{r.name}</span>
-                <span className="text-gray-400 truncate">{r.phone}</span>
+              <div key={i} style={{ padding: '6px 10px', fontSize: 12, color: TEXT, display: 'flex', gap: 12, borderBottom: `1px solid ${BORDER}` }}>
+                <span style={{ fontWeight: 600, width: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                <span style={{ color: SUBTLE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.phone}</span>
               </div>
             ))}
-            {importPreview.rows.length > 8 && <p className="px-3 py-1.5 text-xs text-gray-400">... e mais {importPreview.rows.length - 8}</p>}
+            {importPreview.rows.length > 8 && <p style={{ padding: '6px 10px', fontSize: 12, color: SUBTLE, margin: 0 }}>... e mais {importPreview.rows.length - 8}</p>}
           </div>
-          <button
-            onClick={confirmImport}
-            disabled={importing}
-            className="w-full mt-2 py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2"
-            style={{ backgroundColor: PRIMARY, opacity: importing ? 0.7 : 1 }}
-          >
+          <button onClick={confirmImport} disabled={importing} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: importing ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             {importing && <Loader2 size={14} className="animate-spin" />}
             {importing ? 'Importando...' : `Importar ${importPreview.rows.length} leads`}
           </button>
         </Modal>
       )}
 
-      {/* Flow Canvas (fullscreen overlay for creating/editing automations) */}
+      {/* Flow Editor */}
       {flowEditorOpen && (
         <FlowCanvas
           name={autoForm.name}
@@ -1444,29 +1077,18 @@ export default function PulsoCRM() {
           initialNodes={editingAuto?.flow_nodes || []}
           initialEdges={editingAuto?.flow_edges || []}
           onSave={async ({ trigger_type, trigger_config, actions, nodes, edges }) => {
-            const autoData = {
-              name: autoForm.name || 'Nova automação',
-              trigger_type,
-              trigger_config,
-              actions,
-              flow_nodes: nodes,
-              flow_edges: edges,
-            };
+            const autoData = { name: autoForm.name || 'Nova automação', trigger_type, trigger_config, actions, flow_nodes: nodes, flow_edges: edges };
             try {
               if (editingAuto) {
                 const updated = await apiFetch(`/automations/${editingAuto.id}`, { method: 'PUT', body: JSON.stringify(autoData) });
                 setAutomations(prev => prev.map(a => a.id === editingAuto.id ? updated : a));
-                setFlowEditorOpen(false);
-                addToast(`Automação "${updated.name}" atualizada`);
+                setFlowEditorOpen(false); addToast(`Automação "${updated.name}" atualizada`);
               } else {
                 const auto = await apiFetch('/automations', { method: 'POST', body: JSON.stringify(autoData) });
                 setAutomations(prev => [...prev, auto]);
-                setFlowEditorOpen(false);
-                addToast(`Automação "${auto.name}" criada`);
+                setFlowEditorOpen(false); addToast(`Automação "${auto.name}" criada`);
               }
-            } catch (err) {
-              addToast(`Erro: ${err.message}`);
-            }
+            } catch (err) { addToast(`Erro: ${err.message}`); }
           }}
           onClose={() => setFlowEditorOpen(false)}
         />
@@ -1478,9 +1100,7 @@ export default function PulsoCRM() {
           token={token}
           apiUrl={API_URL}
           onEntrarComoCliente={(clienteToken, clienteCompany) => {
-            setToken(clienteToken);
-            setCompany(clienteCompany);
-            setIsAdmin(false);
+            setToken(clienteToken); setCompany(clienteCompany); setIsAdmin(false);
             localStorage.setItem('pulso_token', clienteToken);
             localStorage.setItem('pulso_company', JSON.stringify(clienteCompany));
             localStorage.setItem('pulso_is_admin', 'false');
@@ -1490,10 +1110,10 @@ export default function PulsoCRM() {
       )}
 
       {/* Toasts */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
+      <div style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
         {toasts.map((t) => (
-          <div key={t.id} className="bg-white rounded-lg shadow-lg border-l-4 px-4 py-3 text-sm flex items-center gap-2 max-w-xs" style={{ borderColor: PRIMARY }}>
-            <Zap size={14} style={{ color: PRIMARY }} className="flex-shrink-0" />
+          <div key={t.id} style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PRIMARY}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, maxWidth: 300, color: TEXT, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+            <Zap size={13} style={{ color: PRIMARY, flexShrink: 0 }} />
             {t.text}
           </div>
         ))}
@@ -1504,9 +1124,24 @@ export default function PulsoCRM() {
 
 function SideBtn({ active, onClick, icon, title }) {
   return (
-    <button title={title} onClick={onClick} className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ backgroundColor: active ? "rgba(255,255,255,0.12)" : "transparent", color: active ? "#FFFFFF" : "rgba(255,255,255,0.5)" }}>
-      {icon}
-    </button>
+    <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3px 0' }}>
+      {active && <span style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 22, borderRadius: '0 3px 3px 0', background: PRIMARY }} />}
+      <button
+        title={title}
+        onClick={onClick}
+        style={{
+          width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: active ? 'rgba(99,102,241,0.14)' : 'transparent',
+          color: active ? '#818CF8' : 'rgba(148,163,184,0.45)',
+          border: 'none', cursor: 'pointer',
+          transition: 'background 0.15s, color 0.15s',
+        }}
+        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(148,163,184,0.8)'; }}}
+        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(148,163,184,0.45)'; }}}
+      >
+        {icon}
+      </button>
+    </div>
   );
 }
 
@@ -1515,42 +1150,45 @@ function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
   const tags = lead.tags || [];
   const initials = lead.name.split(' ').map(p => p[0]).slice(0,2).join('');
   return (
-    <div draggable onDragStart={(e) => onDragStart(e, lead.id)} onClick={onClick} className="bg-white rounded-xl shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border border-black/5">
-      <div className="flex items-start gap-2">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5" style={{ backgroundColor: color }}>
-          {initials}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-1">
-            <p className="font-semibold text-sm leading-tight">{lead.name}</p>
-            {stage.temp === 1 ? <Flame size={12} style={{ color }} className="flex-shrink-0 mt-0.5" /> : stage.temp === 0 ? <Snowflake size={12} style={{ color }} className="flex-shrink-0 mt-0.5" /> : null}
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, lead.id)}
+      onClick={onClick}
+      style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10, cursor: 'grab', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.3)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.04)'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ width: 28, height: 28, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{initials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, margin: 0, color: TEXT, lineHeight: 1.3 }}>{lead.name}</p>
+            {stage.temp === 1 ? <Flame size={11} strokeWidth={1.5} style={{ color, flexShrink: 0, marginTop: 1 }} /> : stage.temp === 0 ? <Snowflake size={11} strokeWidth={1.5} style={{ color, flexShrink: 0, marginTop: 1 }} /> : null}
           </div>
-          {lead.company_name && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{lead.company_name}</p>}
+          {lead.company_name && <p style={{ fontSize: 10, color: SUBTLE, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</p>}
         </div>
       </div>
 
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {tags.map(tag => (
-            <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: color + '22', color }}>{tag}</span>
-          ))}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+          {tags.map(tag => <span key={tag} style={{ padding: '1px 6px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: color + '22', color }}>{tag}</span>)}
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-        <span className="text-xs font-semibold pulso-mono" style={{ color }}>{formatBRL(lead.value)}</span>
-        <div className="flex items-center gap-2">
-          {lead.created_at && <span className="text-[10px] text-gray-300 flex items-center gap-0.5"><Calendar size={9} />{formatDate(lead.created_at)}</span>}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
+        <span className="pulso-mono" style={{ fontSize: 11, fontWeight: 600, color }}>{formatBRL(lead.value)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {lead.created_at && <span style={{ fontSize: 10, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={9} strokeWidth={1.5} />{formatDate(lead.created_at)}</span>}
           {lead.phone && (
-            <button onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }} className="text-green-500 hover:text-green-600" title="Abrir conversa">
-              <MessageCircle size={13} />
+            <button onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS, padding: 0 }} title="Abrir conversa">
+              <MessageCircle size={12} strokeWidth={1.5} />
             </button>
           )}
         </div>
       </div>
 
       {lastMsg && (
-        <p className="text-[11px] text-gray-400 mt-1.5 italic truncate">
+        <p style={{ fontSize: 10, color: SUBTLE, margin: '6px 0 0', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {lastMsg.from_type === "me" ? "Você: " : ""}{lastMsg.text}
         </p>
       )}
@@ -1559,10 +1197,8 @@ function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
 }
 
 function Dashboard({ leads }) {
-  const PRIMARY = '#4F3CC9';
-  const SUCCESS = '#16A34A';
-  const DANGER = '#E11D48';
-
+  const SUCCESS_D = "#22C55E";
+  const DANGER_D = "#F43F5E";
   const total = leads.reduce((s, l) => s + Number(l.value || 0), 0);
   const ganhos = leads.filter(l => l.stage === 'ganho');
   const perdidos = leads.filter(l => l.stage === 'perdido');
@@ -1571,12 +1207,7 @@ function Dashboard({ leads }) {
   const totalPerdido = perdidos.reduce((s, l) => s + Number(l.value || 0), 0);
   const totalAberto = abertos.reduce((s, l) => s + Number(l.value || 0), 0);
 
-  // Daily leads chart — last 7 days
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d;
-  });
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d; });
   const dayData = days.map(d => {
     const ds = d.toISOString().slice(0, 10);
     const count = leads.filter(l => l.created_at && l.created_at.slice(0, 10) === ds).length;
@@ -1585,89 +1216,67 @@ function Dashboard({ leads }) {
   });
   const maxVal = Math.max(...dayData.map(d => d.value), 1);
   const W = 480, H = 120, PAD = 10;
-  const pts = dayData.map((d, i) => ({
-    x: PAD + (i / (dayData.length - 1)) * (W - PAD * 2),
-    y: H - PAD - (d.value / maxVal) * (H - PAD * 2),
-  }));
+  const pts = dayData.map((d, i) => ({ x: PAD + (i / (dayData.length - 1)) * (W - PAD * 2), y: H - PAD - (d.value / maxVal) * (H - PAD * 2) }));
   const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   const kpis = [
-    { label: 'Total criados', value: formatBRL(total), sub: `${leads.length} negócios`, color: PRIMARY, icon: <Activity size={20} style={{ color: PRIMARY }} /> },
-    { label: 'Total ganhos', value: formatBRL(totalGanho), sub: `${ganhos.length} negócios`, color: SUCCESS, icon: <TrendingUp size={20} style={{ color: SUCCESS }} /> },
-    { label: 'Total perdidos', value: formatBRL(totalPerdido), sub: `${perdidos.length} negócios`, color: DANGER, icon: <TrendingDown size={20} style={{ color: DANGER }} /> },
-    { label: 'Total em aberto', value: formatBRL(totalAberto), sub: `${abertos.length} negócios`, color: '#D97706', icon: <Activity size={20} style={{ color: '#D97706' }} /> },
-    { label: 'Total negócios', value: formatBRL(total), sub: `${leads.length} negócios`, color: '#2563EB', icon: <BarChart2 size={20} style={{ color: '#2563EB' }} /> },
+    { label: 'Total criados', value: formatBRL(total), sub: `${leads.length} negócios`, color: PRIMARY, icon: <Activity size={18} strokeWidth={1.5} style={{ color: PRIMARY }} /> },
+    { label: 'Total ganhos', value: formatBRL(totalGanho), sub: `${ganhos.length} negócios`, color: SUCCESS_D, icon: <TrendingUp size={18} strokeWidth={1.5} style={{ color: SUCCESS_D }} /> },
+    { label: 'Total perdidos', value: formatBRL(totalPerdido), sub: `${perdidos.length} negócios`, color: DANGER_D, icon: <TrendingDown size={18} strokeWidth={1.5} style={{ color: DANGER_D }} /> },
+    { label: 'Total em aberto', value: formatBRL(totalAberto), sub: `${abertos.length} negócios`, color: '#F59E0B', icon: <Activity size={18} strokeWidth={1.5} style={{ color: '#F59E0B' }} /> },
+    { label: 'Total negócios', value: formatBRL(total), sub: `${leads.length} negócios`, color: '#38BDF8', icon: <BarChart2 size={18} strokeWidth={1.5} style={{ color: '#38BDF8' }} /> },
   ];
 
-  // Top leads por valor
   const topLeads = [...leads].sort((a, b) => Number(b.value) - Number(a.value)).slice(0, 5);
 
   return (
-    <div className="h-full overflow-y-auto pulso-scroll p-6" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* KPI cards */}
-      <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+    <div style={{ height: '100%', overflowY: 'auto', padding: 20 }}>
+      <div style={{ display: 'grid', gap: 12, marginBottom: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
         {kpis.map((k, i) => (
-          <div key={i} className="bg-white rounded-xl border border-black/5 p-4 flex items-start justify-between hover:shadow-sm transition-shadow" style={{ borderTop: `3px solid ${k.color}` }}>
+          <div key={i} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderTop: `2px solid ${k.color}`, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
             <div>
-              <p className="text-xs text-gray-500 font-medium">{k.label}</p>
-              <p className="text-xl font-bold mt-1" style={{ fontFamily: 'Sora, sans-serif', color: '#14171F' }}>{k.value}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>
+              <p style={{ fontSize: 11, color: SUBTLE, fontWeight: 500, margin: 0 }}>{k.label}</p>
+              <p className="pulso-mono" style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0', color: TEXT }}>{k.value}</p>
+              <p style={{ fontSize: 11, color: SUBTLE, margin: '2px 0 0' }}>{k.sub}</p>
             </div>
             {k.icon}
           </div>
         ))}
       </div>
 
-      <div className="grid gap-6" style={{ gridTemplateColumns: '1fr minmax(260px, 320px)' }}>
-        {/* Linha: Dados diários */}
-        <div className="bg-white rounded-xl border border-black/5 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="font-bold text-sm">Dados diários</p>
-              <p className="text-xs text-gray-400">Leads criados nos últimos 7 dias por valor</p>
-            </div>
-          </div>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 120 }}>
-            {/* Grid lines */}
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1fr minmax(240px, 300px)' }}>
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 2px', color: TEXT }}>Dados diários</p>
+          <p style={{ fontSize: 11, color: SUBTLE, margin: '0 0 14px' }}>Leads criados nos últimos 7 dias por valor</p>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 110 }}>
             {[0.25, 0.5, 0.75, 1].map(f => (
-              <line key={f} x1={PAD} y1={H - PAD - f * (H - PAD * 2)} x2={W - PAD} y2={H - PAD - f * (H - PAD * 2)} stroke="#F3F4F6" strokeWidth="1" />
+              <line key={f} x1={PAD} y1={H - PAD - f * (H - PAD * 2)} x2={W - PAD} y2={H - PAD - f * (H - PAD * 2)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
             ))}
-            {/* Filled area */}
-            <path
-              d={`${pathD} L${pts[pts.length-1].x},${H - PAD} L${pts[0].x},${H - PAD} Z`}
-              fill={PRIMARY + '18'}
-            />
-            {/* Line */}
+            <path d={`${pathD} L${pts[pts.length-1].x},${H - PAD} L${pts[0].x},${H - PAD} Z`} fill={PRIMARY + '18'} />
             <path d={pathD} fill="none" stroke={PRIMARY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            {/* Dots */}
-            {pts.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={PRIMARY} stroke="white" strokeWidth="1.5" />
-            ))}
+            {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={PRIMARY} stroke={SURFACE} strokeWidth="1.5" />)}
           </svg>
-          <div className="flex justify-between mt-1 px-2">
-            {dayData.map((d, i) => (
-              <span key={i} className="text-[10px] text-gray-400">{d.label}</span>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 6px' }}>
+            {dayData.map((d, i) => <span key={i} style={{ fontSize: 10, color: SUBTLE }}>{d.label}</span>)}
           </div>
         </div>
 
-        {/* Top leads por valor */}
-        <div className="bg-white rounded-xl border border-black/5 p-5">
-          <p className="font-bold text-sm mb-4">Top leads por valor</p>
-          {topLeads.length === 0 && <p className="text-sm text-gray-300 text-center py-8">Não há dados</p>}
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 14px', color: TEXT }}>Top leads por valor</p>
+          {topLeads.length === 0 && <p style={{ fontSize: 13, color: SUBTLE, textAlign: 'center', padding: '32px 0' }}>Não há dados</p>}
           {topLeads.map((l, i) => {
             const color = stageColor(stageById(l.stage));
             const pct = total > 0 ? (Number(l.value) / total) * 100 : 0;
             return (
-              <div key={l.id} className="flex items-center gap-3 mb-3">
-                <span className="text-xs text-gray-400 w-4">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <p className="text-xs font-semibold truncate">{l.name}</p>
-                    <p className="text-xs font-semibold pulso-mono ml-2 flex-shrink-0" style={{ color }}>{formatBRL(l.value)}</p>
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 11, color: SUBTLE, width: 14 }}>{i + 1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: TEXT }}>{l.name}</p>
+                    <p className="pulso-mono" style={{ fontSize: 11, fontWeight: 600, marginLeft: 8, flexShrink: 0, color }}>{formatBRL(l.value)}</p>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 99, background: color, width: `${pct}%` }} />
                   </div>
                 </div>
               </div>
@@ -1682,42 +1291,34 @@ function Dashboard({ leads }) {
 function TagInput({ onAdd }) {
   const [value, setValue] = useState('');
   const [active, setActive] = useState(false);
-  function submit() {
-    const tag = value.trim();
-    if (tag) { onAdd(tag); setValue(''); setActive(false); }
-  }
+  function submit() { const tag = value.trim(); if (tag) { onAdd(tag); setValue(''); setActive(false); } }
   if (!active) {
     return (
-      <button onClick={() => setActive(true)} className="text-[10px] text-gray-300 hover:text-gray-500 border border-dashed border-gray-200 rounded-full px-2 py-0.5">
+      <button onClick={() => setActive(true)} style={{ fontSize: 10, color: SUBTLE, border: `1px dashed rgba(255,255,255,0.12)`, background: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer' }}>
         + tag
       </button>
     );
   }
   return (
-    <input
-      autoFocus
-      value={value}
-      onChange={e => setValue(e.target.value)}
+    <input autoFocus value={value} onChange={e => setValue(e.target.value)}
       onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setValue(''); setActive(false); } }}
-      onBlur={() => { submit(); }}
+      onBlur={submit}
       placeholder="nova tag"
-      className="text-[11px] border border-gray-300 rounded-full px-2 py-0.5 outline-none focus:border-[#4F3CC9] w-20"
+      style={{ fontSize: 11, border: `1px solid rgba(99,102,241,0.4)`, borderRadius: 99, padding: '2px 8px', outline: 'none', background: 'rgba(99,102,241,0.1)', color: TEXT, width: 80, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     />
   );
 }
 
 function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl p-6 w-96 shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-base" style={{ fontFamily: "Sora, sans-serif" }}>{title}</h3>
-          <button onClick={onClose} className="text-gray-300 hover:text-gray-600">
-            <X size={18} />
-          </button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 24, width: 380, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.6)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: TEXT }}>{title}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 4 }}><X size={16} /></button>
         </div>
-        <div className="space-y-3">{children}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
       </div>
     </div>
   );
@@ -1726,24 +1327,24 @@ function Modal({ title, onClose, children }) {
 function Field({ label, children }) {
   return (
     <div>
-      <label className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>
+      <label style={{ fontSize: 11, fontWeight: 600, color: SUBTLE, display: 'block', marginBottom: 5 }}>{label}</label>
       {children}
     </div>
   );
 }
 
 const TRIGGER_TYPES = [
-  { id: 'new_lead', label: 'Novo lead criado', icon: '🆕', color: '#16A34A', bg: '#F0FDF4' },
-  { id: 'stage_changed', label: 'Lead muda de etapa', icon: '📊', color: '#2563EB', bg: '#EFF6FF' },
-  { id: 'message_received', label: 'Mensagem recebida', icon: '💬', color: '#7C3AED', bg: '#F5F3FF' },
-  { id: 'no_response', label: 'Sem resposta', icon: '⏰', color: '#DC2626', bg: '#FEF2F2' },
+  { id: 'new_lead', label: 'Novo lead criado', icon: '🆕', color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
+  { id: 'stage_changed', label: 'Lead muda de etapa', icon: '📊', color: '#38BDF8', bg: 'rgba(56,189,248,0.08)' },
+  { id: 'message_received', label: 'Mensagem recebida', icon: '💬', color: '#A78BFA', bg: 'rgba(167,139,250,0.08)' },
+  { id: 'no_response', label: 'Sem resposta', icon: '⏰', color: '#F43F5E', bg: 'rgba(244,63,94,0.08)' },
 ];
 
 const ACTION_TYPES = [
-  { id: 'send_whatsapp', label: 'Enviar WhatsApp', icon: '💬', color: '#16A34A' },
-  { id: 'wait', label: 'Aguardar', icon: '⏱', color: '#D97706' },
-  { id: 'move_stage', label: 'Mover de etapa', icon: '📦', color: '#2563EB' },
-  { id: 'add_note', label: 'Adicionar nota', icon: '📝', color: '#6B7280' },
+  { id: 'send_whatsapp', label: 'Enviar WhatsApp', icon: '💬', color: '#22C55E' },
+  { id: 'wait', label: 'Aguardar', icon: '⏱', color: '#F59E0B' },
+  { id: 'move_stage', label: 'Mover de etapa', icon: '📦', color: '#38BDF8' },
+  { id: 'add_note', label: 'Adicionar nota', icon: '📝', color: '#94A3B8' },
 ];
 
 const STAGES_PIPELINE = ['novo', 'qualificacao', 'proposta', 'negociacao', 'ganho', 'perdido'];
@@ -1752,64 +1353,47 @@ const STAGE_LABELS = { novo: 'Novo Lead', qualificacao: 'Qualificação', propos
 function AutomationCard({ auto, onToggle, onDelete, onEdit }) {
   const trigger = TRIGGER_TYPES.find(t => t.id === auto.trigger_type) || TRIGGER_TYPES[0];
   const actions = Array.isArray(auto.actions) ? auto.actions : [];
-
   return (
-    <div className="bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+      <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div>
-          <p className="font-bold text-sm" style={{ color: '#14171F' }}>{auto.name}</p>
-          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: auto.enabled ? '#DCFCE7' : '#F3F4F6', color: auto.enabled ? '#16A34A' : '#9CA3AF' }}>
-            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: auto.enabled ? '#16A34A' : '#D1D5DB' }} />
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: TEXT }}>{auto.name}</p>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: auto.enabled ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)', color: auto.enabled ? '#22C55E' : SUBTLE }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: auto.enabled ? '#22C55E' : '#334155', display: 'inline-block' }} />
             {auto.enabled ? 'Ativa' : 'Inativa'}
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={onToggle} className="w-9 h-5 rounded-full relative transition-colors flex-shrink-0" style={{ backgroundColor: auto.enabled ? '#4F3CC9' : '#E5E7EB' }}>
-            <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: auto.enabled ? '17px' : '2px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <button onClick={onToggle} style={{ width: 34, height: 18, borderRadius: 99, position: 'relative', background: auto.enabled ? PRIMARY : 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}>
+            <span style={{ position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s', left: auto.enabled ? '17px' : '2px' }} />
           </button>
-          <button onClick={onEdit} className="text-gray-200 hover:text-blue-400 transition-colors" title="Editar">
-            <Pencil size={14} />
-          </button>
-          <button onClick={onDelete} className="text-gray-200 hover:text-rose-400 transition-colors" title="Excluir">
-            <Trash2 size={14} />
-          </button>
+          <button onClick={onEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 3 }} title="Editar"><Pencil size={13} strokeWidth={1.5} /></button>
+          <button onClick={onDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 3 }} title="Excluir"><Trash2 size={13} strokeWidth={1.5} /></button>
         </div>
       </div>
 
-      {/* Flow */}
-      <div className="px-4 pb-4 space-y-2">
-        {/* Trigger */}
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: trigger.bg, color: trigger.color }}>
+      <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: trigger.bg, color: trigger.color, border: `1px solid ${trigger.color}22` }}>
           <span>{trigger.icon}</span>
           <span>{trigger.label}</span>
           {auto.trigger_type === 'stage_changed' && auto.trigger_config?.stage && (
-            <span className="ml-auto opacity-70">→ {STAGE_LABELS[auto.trigger_config.stage] || auto.trigger_config.stage}</span>
+            <span style={{ marginLeft: 'auto', opacity: 0.7 }}>→ {STAGE_LABELS[auto.trigger_config.stage] || auto.trigger_config.stage}</span>
           )}
         </div>
 
-        {/* Arrow + Actions */}
         {actions.map((action, i) => {
           const at = ACTION_TYPES.find(a => a.id === action.type) || ACTION_TYPES[0];
           return (
-            <div key={i} className="flex flex-col items-start gap-1">
-              <div className="w-px h-3 bg-gray-200 ml-4" />
-              <div className="w-full px-3 py-2 rounded-xl text-xs border border-gray-100 flex items-start gap-2" style={{ background: '#FAFAFA' }}>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+              <div style={{ width: 1, height: 10, background: BORDER, marginLeft: 16 }} />
+              <div style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 12, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <span style={{ color: at.color }}>{at.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold" style={{ color: at.color }}>{at.label}</span>
-                  {action.type === 'send_whatsapp' && action.message && (
-                    <p className="text-gray-400 truncate mt-0.5">"{action.message}"</p>
-                  )}
-                  {action.type === 'wait' && (
-                    <span className="text-gray-400 ml-1">{action.minutes || 1} min</span>
-                  )}
-                  {action.type === 'move_stage' && action.stage && (
-                    <span className="text-gray-400 ml-1">→ {STAGE_LABELS[action.stage] || action.stage}</span>
-                  )}
-                  {action.type === 'add_note' && action.note && (
-                    <p className="text-gray-400 truncate mt-0.5">"{action.note}"</p>
-                  )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, color: at.color }}>{at.label}</span>
+                  {action.type === 'send_whatsapp' && action.message && <p style={{ color: SUBTLE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 0', fontSize: 11 }}>"{action.message}"</p>}
+                  {action.type === 'wait' && <span style={{ color: SUBTLE, marginLeft: 6 }}>{action.minutes || 1} min</span>}
+                  {action.type === 'move_stage' && action.stage && <span style={{ color: SUBTLE, marginLeft: 6 }}>→ {STAGE_LABELS[action.stage] || action.stage}</span>}
+                  {action.type === 'add_note' && action.note && <p style={{ color: SUBTLE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 0', fontSize: 11 }}>"{action.note}"</p>}
                 </div>
               </div>
             </div>
@@ -1819,5 +1403,3 @@ function AutomationCard({ auto, onToggle, onDelete, onEdit }) {
     </div>
   );
 }
-
-
