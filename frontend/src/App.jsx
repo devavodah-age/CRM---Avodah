@@ -718,35 +718,74 @@ export default function PulsoCRM() {
           )}
 
           {/* Pipeline */}
-          {view === "pipeline" && (
-            <div style={{ height: '100%', overflowX: 'auto', padding: 16, display: 'flex', gap: 12 }}>
-              {STAGES.map((stage) => {
-                const stageLeads = filteredLeads.filter((l) => l.stage === stage.id);
-                const total = stageLeads.reduce((s, l) => s + l.value, 0);
-                const color = stageColor(stage);
-                return (
-                  <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)} style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-                    <div style={{ padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 8px ${color}88` }} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: TEXT, flex: 1 }}>{stage.name}</span>
-                      <span style={{ fontSize: 11, color: SUBTLE, background: 'rgba(255,255,255,0.06)', borderRadius: 99, padding: '1px 7px' }}>{stageLeads.length}</span>
-                    </div>
-                    <div style={{ padding: '6px 8px 4px', fontSize: 11, color: SUBTLE }} className="pulso-mono">{formatBRL(total)}</div>
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 100 }}>
-                      {stageLeads.map((lead, idx) => (
-                        <div key={lead.id} style={{ animationDelay: `${idx * 0.05}s` }}>
-                          <LeadCard lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
-                        </div>
-                      ))}
-                      {stageLeads.length === 0 && (
-                        <div style={{ fontSize: 11, color: SUBTLE, textAlign: 'center', padding: '20px 0', border: `1px dashed ${BORDER}`, borderRadius: 8, marginTop: 4 }}>Solte um lead aqui</div>
-                      )}
-                    </div>
+          {view === "pipeline" && (() => {
+            const pipelineTotal = filteredLeads.reduce((s, l) => s + Number(l.value || 0), 0);
+            return (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* Pipeline summary bar */}
+                <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, background: SURFACE }}>
+                  <span style={{ fontSize: 12, color: SUBTLE }}>
+                    <span style={{ color: TEXT, fontWeight: 700 }}>{filteredLeads.length}</span> leads
+                  </span>
+                  <span style={{ fontSize: 12, color: SUBTLE }}>
+                    Total: <span className="pulso-mono" style={{ color: TEXT, fontWeight: 700 }}>{formatBRL(pipelineTotal)}</span>
+                  </span>
+                  {/* Mini stage distribution bar */}
+                  <div style={{ flex: 1, height: 4, borderRadius: 99, display: 'flex', overflow: 'hidden', gap: 1, maxWidth: 320 }}>
+                    {STAGES.map(s => {
+                      const c = stageColor(s);
+                      const pct = filteredLeads.length > 0 ? (filteredLeads.filter(l => l.stage === s.id).length / filteredLeads.length) * 100 : 0;
+                      return pct > 0 ? <div key={s.id} style={{ height: '100%', background: c, width: `${pct}%`, transition: 'width 0.4s ease' }} title={`${s.name}: ${Math.round(pct)}%`} /> : null;
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+
+                {/* Columns */}
+                <div style={{ flex: 1, overflowX: 'auto', padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  {STAGES.map((stage) => {
+                    const stageLeads = filteredLeads.filter((l) => l.stage === stage.id);
+                    const total = stageLeads.reduce((s, l) => s + Number(l.value || 0), 0);
+                    const color = stageColor(stage);
+                    const pct = pipelineTotal > 0 ? (total / pipelineTotal) * 100 : 0;
+                    return (
+                      <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)}
+                        style={{ width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', maxHeight: '100%' }}>
+
+                        {/* Column header */}
+                        <div style={{ borderTop: `3px solid ${color}`, padding: '12px 14px 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{stage.name}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, background: color + '22', color, borderRadius: 99, padding: '2px 9px', minWidth: 22, textAlign: 'center' }}>{stageLeads.length}</span>
+                          </div>
+                          <p className="pulso-mono" style={{ fontSize: 16, fontWeight: 700, color: TEXT, margin: '0 0 6px' }}>{formatBRL(total)}</p>
+                          {/* Value progress bar */}
+                          <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 99, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', background: color, width: `${pct}%`, borderRadius: 99, transition: 'width 0.5s ease' }} />
+                          </div>
+                          <p style={{ fontSize: 10, color: SUBTLE, margin: '4px 0 0' }}>{Math.round(pct)}% do pipeline</p>
+                        </div>
+
+                        {/* Cards */}
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80 }}>
+                          {stageLeads.map((lead, idx) => (
+                            <div key={lead.id} className="pulso-fade-up" style={{ animationDelay: `${idx * 0.04}s` }}>
+                              <LeadCard lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
+                            </div>
+                          ))}
+                          {stageLeads.length === 0 && (
+                            <div style={{ fontSize: 11, color: SUBTLE, textAlign: 'center', padding: '24px 0', border: `1px dashed rgba(255,255,255,0.07)`, borderRadius: 10, marginTop: 2 }}>
+                              <div style={{ fontSize: 18, marginBottom: 4, opacity: 0.3 }}>↓</div>
+                              Solte um lead aqui
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Contatos */}
           {view === "contatos" && (
@@ -1189,42 +1228,64 @@ function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
       draggable
       onDragStart={(e) => onDragStart(e, lead.id)}
       onClick={onClick}
-      className="pulso-lead-card pulso-fade-up"
-      style={{ padding: 10 }}
+      className="pulso-lead-card"
+      style={{ padding: 0, overflow: 'hidden', borderLeft: `3px solid ${color}` }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ width: 28, height: 28, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{initials}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, margin: 0, color: TEXT, lineHeight: 1.3 }}>{lead.name}</p>
-            {stage.temp === 1 ? <Flame size={11} strokeWidth={1.5} style={{ color, flexShrink: 0, marginTop: 1 }} /> : stage.temp === 0 ? <Snowflake size={11} strokeWidth={1.5} style={{ color, flexShrink: 0, marginTop: 1 }} /> : null}
+      {/* Card body */}
+      <div style={{ padding: '10px 12px 8px' }}>
+        {/* Top row: avatar + name + value */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: color + '28', display: 'flex', alignItems: 'center', justifyContent: 'center', color, fontSize: 11, fontWeight: 800, flexShrink: 0, border: `1px solid ${color}44` }}>{initials}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{lead.name}</p>
+              {stage.temp === 1 ? <Flame size={11} strokeWidth={1.5} style={{ color, flexShrink: 0 }} /> : stage.temp === 0 ? <Snowflake size={11} strokeWidth={1.5} style={{ color, flexShrink: 0 }} /> : null}
+            </div>
+            {lead.company_name && (
+              <p style={{ fontSize: 10, color: SUBTLE, margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</p>
+            )}
           </div>
-          {lead.company_name && <p style={{ fontSize: 10, color: SUBTLE, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</p>}
         </div>
+
+        {/* Value pill */}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="pulso-mono" style={{ fontSize: 13, fontWeight: 800, color, letterSpacing: '-0.02em' }}>{formatBRL(lead.value)}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {lead.created_at && (
+              <span style={{ fontSize: 10, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Calendar size={9} strokeWidth={1.5} />{formatDate(lead.created_at)}
+              </span>
+            )}
+            {lead.phone && (
+              <button
+                onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }}
+                style={{ background: SUCCESS + '18', border: `1px solid ${SUCCESS}33`, borderRadius: 6, cursor: 'pointer', color: SUCCESS, padding: '3px 5px', display: 'flex', alignItems: 'center' }}
+                title="Abrir conversa"
+              >
+                <MessageCircle size={11} strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+            {tags.map(tag => (
+              <span key={tag} style={{ padding: '1px 7px', borderRadius: 99, fontSize: 9, fontWeight: 700, background: color + '20', color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tag}</span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {tags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-          {tags.map(tag => <span key={tag} style={{ padding: '1px 6px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: color + '22', color }}>{tag}</span>)}
+      {/* Last message footer */}
+      {lastMsg && lastMsg.from_type !== 'system' && (
+        <div style={{ padding: '6px 12px', borderTop: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MessageSquare size={9} strokeWidth={1.5} style={{ color: SUBTLE, flexShrink: 0 }} />
+          <p style={{ fontSize: 10, color: SUBTLE, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: 'italic' }}>
+            {lastMsg.from_type === 'me' ? 'Você: ' : ''}{lastMsg.text}
+          </p>
         </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
-        <span className="pulso-mono" style={{ fontSize: 11, fontWeight: 600, color }}>{formatBRL(lead.value)}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {lead.created_at && <span style={{ fontSize: 10, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={9} strokeWidth={1.5} />{formatDate(lead.created_at)}</span>}
-          {lead.phone && (
-            <button onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS, padding: 0 }} title="Abrir conversa">
-              <MessageCircle size={12} strokeWidth={1.5} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {lastMsg && (
-        <p style={{ fontSize: 10, color: SUBTLE, margin: '6px 0 0', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {lastMsg.from_type === "me" ? "Você: " : ""}{lastMsg.text}
-        </p>
       )}
     </div>
   );
