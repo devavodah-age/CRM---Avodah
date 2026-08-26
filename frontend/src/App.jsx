@@ -3,7 +3,7 @@ import {
   LayoutGrid, Users, Zap, Settings, Search, Plus, X, Send, Phone, Building2,
   Flame, Snowflake, Trash2, MessageCircle, LogOut, Loader2, Smartphone,
   Pencil, DollarSign, Edit2, Check, BarChart2, TrendingUp, TrendingDown,
-  Activity, MessageSquare, ChevronRight, Calendar,
+  Activity, MessageSquare, ChevronRight, Calendar, FileText,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 import AdminPanel from "./AdminPanel";
@@ -74,6 +74,7 @@ const AUTO_REPLIES = [
 const sharedStyle = `
   .pulso-mono { font-family: 'JetBrains Mono', monospace; }
   @keyframes pulso-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes pulso-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   .pulso-input {
     width: 100%;
     padding: 9px 12px;
@@ -84,15 +85,47 @@ const sharedStyle = `
     color: #F1F5F9;
     outline: none;
     font-family: 'Plus Jakarta Sans', sans-serif;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .pulso-input::placeholder { color: #475569; }
-  .pulso-input:focus { border-color: rgba(99,102,241,0.55); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
-  .dark-card {
+  .pulso-input:focus { border-color: rgba(99,102,241,0.55); box-shadow: 0 0 0 3px rgba(99,102,241,0.10); }
+  .pulso-btn-primary {
+    background: ${PRIMARY};
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  .pulso-btn-primary:hover { background: #4F46E5; }
+  .pulso-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+  .pulso-card {
     background: ${SURFACE};
     border: 1px solid ${BORDER};
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.4);
     border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .pulso-lead-card {
+    background: ${SURFACE2};
+    border: 1px solid ${BORDER};
+    border-radius: 10px;
+    cursor: grab;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .pulso-lead-card:hover {
+    transform: scale(1.02);
+    border-color: rgba(255,255,255,0.12);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .pulso-lead-card:active { cursor: grabbing; transform: scale(0.99); }
+  .pulso-fade-up { animation: pulso-fade-up 0.35s ease both; }
+  @media (prefers-reduced-motion: reduce) {
+    .pulso-fade-up { animation: none; }
+    .pulso-lead-card:hover { transform: none; }
+    .pulso-btn-primary { transition: none; }
   }
 `;
 
@@ -420,7 +453,7 @@ export default function PulsoCRM() {
         <div style={{ width: '100%', maxWidth: 380, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '36px 32px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 24px 64px rgba(0,0,0,0.6)', position: 'relative' }}>
           {/* Logo */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 12, boxShadow: `0 0 24px rgba(99,102,241,0.4)`, position: 'relative' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 12, boxShadow: 'none', position: 'relative' }}>
               P
               <span style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 10, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: `2px solid ${SURFACE}` }} />
             </div>
@@ -448,7 +481,7 @@ export default function PulsoCRM() {
 
             {authError && <p style={{ fontSize: 12, color: DANGER, margin: 0 }}>{authError}</p>}
 
-            <button disabled={authLoading} type="submit" style={{ marginTop: 4, width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(99,102,241,0.3)', opacity: authLoading ? 0.7 : 1, transition: 'opacity 0.15s' }}>
+            <button disabled={authLoading} type="submit" style={{ marginTop: 4, width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(99,102,241,0.3)', opacity: authLoading ? 0.7 : 1, transition: 'opacity 0.15s' }}>
               {authLoading && <Loader2 size={14} className="animate-spin" />}
               {authMode === "login" ? "Entrar" : "Criar conta"}
             </button>
@@ -476,7 +509,7 @@ export default function PulsoCRM() {
       {/* Sidebar */}
       <aside style={{ width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16, paddingBottom: 16, background: '#0A0B0F', borderRight: `1px solid ${BORDER}`, gap: 0 }}>
         {/* Logo */}
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', position: 'relative', marginBottom: 20, boxShadow: `0 0 16px rgba(99,102,241,0.35)`, flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', position: 'relative', marginBottom: 20, boxShadow: `0 0 16px rgba(99,102,241,0.35)`, flexShrink: 0 }}>
           P
           <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: '1.5px solid #0A0B0F' }} />
         </div>
@@ -526,18 +559,18 @@ export default function PulsoCRM() {
                 <button onClick={() => csvInputRef.current?.click()} style={{ padding: '7px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8, border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.04)', color: MUTED, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Importar CSV
                 </button>
-                <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 0 16px rgba(99,102,241,0.3)' }}>
+                <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: 'none' }}>
                   <Plus size={14} strokeWidth={2} /> Novo Lead
                 </button>
               </>
             )}
             {view === "automacoes" && (
-              <button onClick={openNewAutomation} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <button onClick={openNewAutomation} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <Plus size={14} strokeWidth={2} /> Nova Automação
               </button>
             )}
             {view === "conversas" && (
-              <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <button onClick={() => setShowNewLeadModal(true)} style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <Plus size={14} strokeWidth={2} /> Novo Lead
               </button>
             )}
@@ -638,7 +671,7 @@ export default function PulsoCRM() {
                     {templates.length > 0 && (
                       <div style={{ padding: '8px 12px 0', background: SURFACE, position: 'relative' }}>
                         <button onClick={() => setShowTemplatesDropdown(v => !v)} style={{ fontSize: 11, color: SUBTLE, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
+                          <FileText size={11} /> Templates {showTemplatesDropdown ? '▲' : '▼'}
                         </button>
                         {showTemplatesDropdown && (
                           <div style={{ position: 'absolute', bottom: 32, left: 12, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
@@ -700,8 +733,10 @@ export default function PulsoCRM() {
                     </div>
                     <div style={{ padding: '6px 8px 4px', fontSize: 11, color: SUBTLE }} className="pulso-mono">{formatBRL(total)}</div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 100 }}>
-                      {stageLeads.map((lead) => (
-                        <LeadCard key={lead.id} lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
+                      {stageLeads.map((lead, idx) => (
+                        <div key={lead.id} style={{ animationDelay: `${idx * 0.05}s` }}>
+                          <LeadCard lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
+                        </div>
                       ))}
                       {stageLeads.length === 0 && (
                         <div style={{ fontSize: 11, color: SUBTLE, textAlign: 'center', padding: '20px 0', border: `1px dashed ${BORDER}`, borderRadius: 8, marginTop: 4 }}>Solte um lead aqui</div>
@@ -791,7 +826,7 @@ export default function PulsoCRM() {
                     <p style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: 0 }}>Nenhuma automação ainda</p>
                     <p style={{ fontSize: 13, color: SUBTLE, margin: '4px 0 0' }}>Crie sua primeira automação para trabalhar no piloto automático</p>
                   </div>
-                  <button onClick={openNewAutomation} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <button onClick={openNewAutomation} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <Plus size={14} /> Criar primeira automação
                   </button>
                 </div>
@@ -871,7 +906,7 @@ export default function PulsoCRM() {
                       if (updated.pixel_id) loadFbPixel(updated.pixel_id);
                       addToast('Configurações salvas!');
                     } catch (err) { addToast(`Erro: ${err.message}`); } finally { setSettingsSaving(false); }
-                  }} disabled={settingsSaving} style={{ background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: settingsSaving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif", alignSelf: 'flex-start' }}>
+                  }} disabled={settingsSaving} style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: settingsSaving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif", alignSelf: 'flex-start' }}>
                     {settingsSaving ? 'Salvando...' : 'Salvar configurações'}
                   </button>
                 </div>
@@ -901,7 +936,7 @@ export default function PulsoCRM() {
                   <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <input placeholder="Nome do template" value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} className="pulso-input" />
                     <textarea placeholder="Texto da mensagem... use {nome}, {empresa}" value={templateForm.text} onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))} rows={3} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', resize: 'vertical', background: 'rgba(255,255,255,0.04)', color: TEXT, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-                    <button onClick={saveTemplate} disabled={templateSaving || !templateForm.name || !templateForm.text} style={{ background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (templateSaving || !templateForm.name || !templateForm.text) ? 0.5 : 1, alignSelf: 'flex-start', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <button onClick={saveTemplate} disabled={templateSaving || !templateForm.name || !templateForm.text} style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (templateSaving || !templateForm.name || !templateForm.text) ? 0.5 : 1, alignSelf: 'flex-start', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       {templateSaving ? 'Salvando...' : '+ Adicionar template'}
                     </button>
                   </div>
@@ -1003,7 +1038,7 @@ export default function PulsoCRM() {
             {templates.length > 0 && (
               <div style={{ padding: '8px 12px 0', background: SURFACE, position: 'relative' }}>
                 <button onClick={() => setShowTemplatesDropdown(v => !v)} style={{ fontSize: 11, color: SUBTLE, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  📋 Templates {showTemplatesDropdown ? '▲' : '▼'}
+                  <FileText size={11} /> Templates {showTemplatesDropdown ? '▲' : '▼'}
                 </button>
                 {showTemplatesDropdown && (
                   <div style={{ position: 'absolute', bottom: 32, left: 12, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
@@ -1043,7 +1078,7 @@ export default function PulsoCRM() {
           <Field label="Valor estimado (R$)">
             <input value={newLeadForm.value} onChange={(e) => setNewLeadForm({ ...newLeadForm, value: e.target.value })} type="number" className="pulso-input" placeholder="0" />
           </Field>
-          <button onClick={addLead} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <button onClick={addLead} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Criar lead
           </button>
         </Modal>
@@ -1062,7 +1097,7 @@ export default function PulsoCRM() {
             ))}
             {importPreview.rows.length > 8 && <p style={{ padding: '6px 10px', fontSize: 12, color: SUBTLE, margin: 0 }}>... e mais {importPreview.rows.length - 8}</p>}
           </div>
-          <button onClick={confirmImport} disabled={importing} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${PRIMARY}, #818CF8)`, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: importing ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <button onClick={confirmImport} disabled={importing} style={{ width: '100%', marginTop: 6, padding: '10px 0', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: importing ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             {importing && <Loader2 size={14} className="animate-spin" />}
             {importing ? 'Importando...' : `Importar ${importPreview.rows.length} leads`}
           </button>
@@ -1154,9 +1189,8 @@ function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
       draggable
       onDragStart={(e) => onDragStart(e, lead.id)}
       onClick={onClick}
-      style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10, cursor: 'grab', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.3)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.04)'; }}
+      className="pulso-lead-card pulso-fade-up"
+      style={{ padding: 10 }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{initials}</div>
@@ -1229,54 +1263,74 @@ function Dashboard({ leads }) {
 
   const topLeads = [...leads].sort((a, b) => Number(b.value) - Number(a.value)).slice(0, 5);
 
+  const convRate = leads.length > 0 ? Math.round((ganhos.length / leads.length) * 100) : 0;
+
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 20 }}>
-      <div style={{ display: 'grid', gap: 12, marginBottom: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
-        {kpis.map((k, i) => (
-          <div key={i} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderTop: `2px solid ${k.color}`, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-            <div>
-              <p style={{ fontSize: 11, color: SUBTLE, fontWeight: 500, margin: 0 }}>{k.label}</p>
-              <p className="pulso-mono" style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0', color: TEXT }}>{k.value}</p>
-              <p style={{ fontSize: 11, color: SUBTLE, margin: '2px 0 0' }}>{k.sub}</p>
+      {/* Bento grid */}
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(4, 1fr)', gridAutoRows: 'auto', marginBottom: 12 }}>
+        {kpis.slice(0,4).map((k, i) => (
+          <div key={i} className="pulso-card pulso-fade-up" style={{ padding: '16px', animationDelay: `${i * 0.06}s`, borderTop: `2px solid ${k.color}` }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: 11, color: SUBTLE, fontWeight: 500, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{k.label}</p>
+              {k.icon}
             </div>
-            {k.icon}
+            <p className="pulso-mono" style={{ fontSize: 22, fontWeight: 700, margin: '8px 0 2px', color: TEXT }}>{k.value}</p>
+            <p style={{ fontSize: 11, color: SUBTLE, margin: 0 }}>{k.sub}</p>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1fr minmax(240px, 300px)' }}>
-        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr minmax(220px, 280px)' }}>
+        {/* Gráfico de linha */}
+        <div className="pulso-card pulso-fade-up" style={{ padding: 18, animationDelay: '0.25s' }}>
           <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 2px', color: TEXT }}>Dados diários</p>
-          <p style={{ fontSize: 11, color: SUBTLE, margin: '0 0 14px' }}>Leads criados nos últimos 7 dias por valor</p>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 110 }}>
+          <p style={{ fontSize: 11, color: SUBTLE, margin: '0 0 14px' }}>Valor de leads — últimos 7 dias</p>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 100 }}>
             {[0.25, 0.5, 0.75, 1].map(f => (
               <line key={f} x1={PAD} y1={H - PAD - f * (H - PAD * 2)} x2={W - PAD} y2={H - PAD - f * (H - PAD * 2)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
             ))}
-            <path d={`${pathD} L${pts[pts.length-1].x},${H - PAD} L${pts[0].x},${H - PAD} Z`} fill={PRIMARY + '18'} />
+            <path d={`${pathD} L${pts[pts.length-1].x},${H - PAD} L${pts[0].x},${H - PAD} Z`} fill={PRIMARY + '14'} />
             <path d={pathD} fill="none" stroke={PRIMARY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={PRIMARY} stroke={SURFACE} strokeWidth="1.5" />)}
+            {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3" fill={PRIMARY} stroke={SURFACE} strokeWidth="1.5" />)}
           </svg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 6px' }}>
-            {dayData.map((d, i) => <span key={i} style={{ fontSize: 10, color: SUBTLE }}>{d.label}</span>)}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, padding: '0 6px' }}>
+            {dayData.map((d, i) => <span key={i} style={{ fontSize: 9, color: SUBTLE }}>{d.label}</span>)}
           </div>
         </div>
 
-        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+        {/* Taxa de conversão */}
+        <div className="pulso-card pulso-fade-up" style={{ padding: 18, animationDelay: '0.3s', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 2px', color: TEXT }}>Taxa de conversão</p>
+            <p style={{ fontSize: 11, color: SUBTLE, margin: '0 0 16px' }}>Leads ganhos / total criados</p>
+          </div>
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
+            <p className="pulso-mono" style={{ fontSize: 48, fontWeight: 700, margin: 0, color: convRate >= 20 ? SUCCESS_D : convRate >= 10 ? '#F59E0B' : TEXT, lineHeight: 1 }}>{convRate}%</p>
+            <p style={{ fontSize: 11, color: SUBTLE, margin: '8px 0 0' }}>{ganhos.length} ganhos de {leads.length} leads</p>
+          </div>
+          <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', marginTop: 16 }}>
+            <div style={{ height: '100%', width: `${convRate}%`, background: convRate >= 20 ? SUCCESS_D : PRIMARY, borderRadius: 99, transition: 'width 0.6s ease' }} />
+          </div>
+        </div>
+
+        {/* Top leads */}
+        <div className="pulso-card pulso-fade-up" style={{ padding: 18, animationDelay: '0.35s' }}>
           <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 14px', color: TEXT }}>Top leads por valor</p>
-          {topLeads.length === 0 && <p style={{ fontSize: 13, color: SUBTLE, textAlign: 'center', padding: '32px 0' }}>Não há dados</p>}
+          {topLeads.length === 0 && <p style={{ fontSize: 12, color: SUBTLE, textAlign: 'center', padding: '24px 0' }}>Nenhum dado</p>}
           {topLeads.map((l, i) => {
             const color = stageColor(stageById(l.stage));
             const pct = total > 0 ? (Number(l.value) / total) * 100 : 0;
             return (
-              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, color: SUBTLE, width: 14 }}>{i + 1}</span>
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 10, color: SUBTLE, width: 12, flexShrink: 0 }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: TEXT }}>{l.name}</p>
-                    <p className="pulso-mono" style={{ fontSize: 11, fontWeight: 600, marginLeft: 8, flexShrink: 0, color }}>{formatBRL(l.value)}</p>
+                    <p style={{ fontSize: 11, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: TEXT }}>{l.name}</p>
+                    <p className="pulso-mono" style={{ fontSize: 10, fontWeight: 600, marginLeft: 6, flexShrink: 0, color }}>{formatBRL(l.value)}</p>
                   </div>
-                  <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 99, background: color, width: `${pct}%` }} />
+                  <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 99, background: color, width: `${pct}%`, transition: 'width 0.5s ease' }} />
                   </div>
                 </div>
               </div>
