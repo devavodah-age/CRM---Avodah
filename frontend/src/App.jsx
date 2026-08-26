@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  LayoutGrid, Users, Zap, Settings, Search, Plus, X, Send, Phone, Building2,
-  Flame, Snowflake, Trash2, MessageCircle, LogOut, Loader2, Smartphone,
+  Zap, Search, Plus, X, Send, Phone, Building2,
+  Flame, Snowflake, Trash2, MessageCircle, Loader2, Smartphone,
   Pencil, DollarSign, Edit2, Check, BarChart2, TrendingUp, TrendingDown,
   Activity, MessageSquare, ChevronRight, Calendar, FileText,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 import AdminPanel from "./AdminPanel";
 import LeadCard from "./components/LeadCard";
+import Sidebar from "./components/Sidebar";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -508,36 +509,14 @@ export default function PulsoCRM() {
       <style>{sharedStyle}</style>
 
       {/* Sidebar */}
-      <aside style={{ width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16, paddingBottom: 16, background: '#0A0B0F', borderRight: `1px solid ${BORDER}`, gap: 0 }}>
-        {/* Logo */}
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', position: 'relative', marginBottom: 20, boxShadow: `0 0 16px rgba(99,102,241,0.35)`, flexShrink: 0 }}>
-          P
-          <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: '1.5px solid #0A0B0F' }} />
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', alignItems: 'center', flex: 1 }}>
-          <SideBtn active={view === "dashboard"} onClick={() => setView("dashboard")} icon={<BarChart2 size={18} strokeWidth={1.5} />} title="Dashboard" />
-          <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={18} strokeWidth={1.5} />} title="Pipeline" />
-          <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={18} strokeWidth={1.5} />} title="Contatos" />
-          <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={18} strokeWidth={1.5} />} title="Automações" />
-          <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={18} strokeWidth={1.5} />} title="Conversas" />
-          <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={18} strokeWidth={1.5} />} title="WhatsApp" />
-          <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={18} strokeWidth={1.5} />} title="Configurações" />
-          {isAdmin && (
-            <SideBtn active={view === "clientes"} onClick={() => setView("clientes")} icon={<Building2 size={18} strokeWidth={1.5} />} title="Clientes (Admin)" />
-          )}
-        </nav>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <button title="Sair" onClick={logout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6, display: 'flex', transition: 'color 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = TEXT} onMouseLeave={e => e.currentTarget.style.color = SUBTLE}>
-            <LogOut size={16} strokeWidth={1.5} />
-          </button>
-          <div title={company?.name} style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(99,102,241,0.15)', border: `1px solid rgba(99,102,241,0.3)`, color: '#818CF8', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {(company?.name || "?").slice(0, 2).toUpperCase()}
-          </div>
-        </div>
-      </aside>
+      <Sidebar
+        view={view}
+        setView={setView}
+        isAdmin={isAdmin}
+        onLogout={logout}
+        companyName={company?.name}
+        onConversasClick={() => { setView("conversas"); setConvLeadId(null); }}
+      />
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -1193,29 +1172,6 @@ export default function PulsoCRM() {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function SideBtn({ active, onClick, icon, title }) {
-  return (
-    <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3px 0' }}>
-      {active && <span style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 22, borderRadius: '0 3px 3px 0', background: PRIMARY }} />}
-      <button
-        title={title}
-        onClick={onClick}
-        style={{
-          width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: active ? 'rgba(99,102,241,0.14)' : 'transparent',
-          color: active ? '#818CF8' : 'rgba(148,163,184,0.45)',
-          border: 'none', cursor: 'pointer',
-          transition: 'background 0.15s, color 0.15s',
-        }}
-        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(148,163,184,0.8)'; }}}
-        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(148,163,184,0.45)'; }}}
-      >
-        {icon}
-      </button>
     </div>
   );
 }
