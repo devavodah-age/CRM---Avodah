@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Zap, Search, Plus, X, Send, Phone, Building2,
-  Trash2, MessageCircle, Loader2, Smartphone,
-  Pencil, DollarSign, Edit2, Check, BarChart2, TrendingUp, TrendingDown,
+  Zap, Search, Plus, X, Send, Phone,
+  Trash2, Loader2, Smartphone,
+  Pencil, Check, BarChart2, TrendingUp, TrendingDown,
   Activity, MessageSquare, ChevronRight, Calendar, FileText,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
