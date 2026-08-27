@@ -203,8 +203,8 @@ export default function PulsoCRM() {
   async function loadData() {
     setLoadingData(true);
     try {
-      const [leadsData, automationsData] = await Promise.all([apiFetch("/leads"), apiFetch("/automations")]);
-      setLeads(leadsData);
+      const [leadsResp, automationsData] = await Promise.all([apiFetch("/leads"), apiFetch("/automations")]);
+      setLeads(leadsResp?.leads ?? leadsResp ?? []);
       setAutomations(automationsData);
     } catch (err) {
       addToast(`Não consegui carregar os dados: ${err.message}`);
@@ -235,7 +235,8 @@ export default function PulsoCRM() {
     const pollId = setInterval(() => {
       fetch(`${API_URL}/leads`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json()).then(data => {
-          if (Array.isArray(data)) setLeads(prev => data.map(newLead => { const existing = prev.find(l => l.id === newLead.id); return { ...newLead, messages: existing?.messages || [] }; }));
+          const arr = data?.leads ?? (Array.isArray(data) ? data : null);
+          if (arr) setLeads(prev => arr.map(newLead => { const existing = prev.find(l => l.id === newLead.id); return { ...newLead, messages: existing?.messages || [] }; }));
         }).catch(() => {});
     }, 20000);
     return () => clearInterval(pollId);
