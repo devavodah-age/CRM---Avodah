@@ -1,14 +1,15 @@
 const express = require('express')
 const router = express.Router()
-const { pool } = require('../db')
+const pool = require('../db')
 const { JWT_SECRET } = require('../middleware/auth')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const { ok, fail } = require('../lib/respond')
 
 // Middleware: só admin pode acessar estas rotas
 function requireAdmin(req, res, next) {
   if (!req.isAdmin) {
-    return res.status(403).json({ error: 'Acesso restrito a administradores.' })
+    return fail(res, 'Acesso restrito a administradores.', 403)
   }
   next()
 }
@@ -28,10 +29,10 @@ router.get('/', requireAdmin, async (req, res) => {
         GROUP BY c.id, c.name, c.created_at, ws.status
         ORDER BY c.created_at DESC`,
     )
-    res.json({ companies: rows })
+    ok(res, { companies: rows })
   } catch (err) {
     console.error('[GET /companies]', err)
-    res.status(500).json({ error: 'Erro interno' })
+    fail(res, 'Erro interno', 500)
   }
 })
 
@@ -39,7 +40,7 @@ router.get('/', requireAdmin, async (req, res) => {
 router.post('/', requireAdmin, async (req, res) => {
   const { companyName, userName, email, password } = req.body
   if (!companyName || !userName || !email || !password)
-    return res.status(400).json({ error: 'companyName, userName, email e password obrigatórios' })
+    return fail(res, 'companyName, userName, email e password obrigatórios', 400)
 
   const client = await pool.connect()
   try {
@@ -49,7 +50,7 @@ router.post('/', requireAdmin, async (req, res) => {
     const existing = await client.query('SELECT id FROM users WHERE email = $1', [email])
     if (existing.rows.length > 0) {
       await client.query('ROLLBACK')
-      return res.status(409).json({ error: 'Email já cadastrado' })
+      return fail(res, 'Email já cadastrado', 409)
     }
 
     // Cria empresa
@@ -68,15 +69,14 @@ router.post('/', requireAdmin, async (req, res) => {
     )
 
     await client.query('COMMIT')
-    res.status(201).json({
-      ok: true,
+    ok(res, {
       company: { id: companyId, name: companyName },
       user: { id: userRows[0].id, email },
-    })
+    }, 201)
   } catch (err) {
     await client.query('ROLLBACK')
     console.error('[POST /companies]', err)
-    res.status(500).json({ error: 'Erro interno' })
+    fail(res, 'Erro interno', 500)
   } finally {
     client.release()
   }
@@ -98,11 +98,11 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     await client.query('DELETE FROM users WHERE company_id = $1', [id])
     await client.query('DELETE FROM companies WHERE id = $1', [id])
     await client.query('COMMIT')
-    res.json({ ok: true })
+    ok(res, null)
   } catch (err) {
     await client.query('ROLLBACK')
     console.error('[DELETE /companies/:id]', err)
-    res.status(500).json({ error: 'Erro interno' })
+    fail(res, 'Erro interno', 500)
   } finally {
     client.release()
   }
@@ -118,7 +118,7 @@ router.post('/:id/token', requireAdmin, async (req, res) => {
       [id],
     )
     if (rows.length === 0)
-      return res.status(404).json({ error: 'Empresa não encontrada' })
+      return fail(res, 'Empresa não encontrada', 404)
 
     // Busca um usuário da empresa pra popular userId no token
     const { rows: userRows } = await pool.query(
@@ -132,10 +132,10 @@ router.post('/:id/token', requireAdmin, async (req, res) => {
       JWT_SECRET,
       { expiresIn: '8h' },
     )
-    res.json({ token, company: rows[0] })
+    ok(res, { token, company: rows[0] })
   } catch (err) {
     console.error('[POST /companies/:id/token]', err)
-    res.status(500).json({ error: 'Erro interno' })
+    fail(res, 'Erro interno', 500)
   }
 })
 
