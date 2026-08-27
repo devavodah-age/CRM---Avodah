@@ -7,8 +7,8 @@ const testPool = new Pool({
 async function cleanDb() {
   await testPool.query('DELETE FROM messages');
   await testPool.query('DELETE FROM leads');
-  await testPool.query('DELETE FROM companies');
   await testPool.query('DELETE FROM users');
+  await testPool.query('DELETE FROM companies');
 }
 
 module.exports = { testPool, cleanDb };
