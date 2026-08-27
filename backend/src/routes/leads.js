@@ -13,16 +13,31 @@ async function attachMessages(lead) {
 }
 
 router.get('/', async (req, res) => {
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
   try {
-    const result = await pool.query(
-      `SELECT l.*,
-        (SELECT text FROM messages WHERE lead_id=l.id ORDER BY id DESC LIMIT 1) as last_message,
-        (SELECT COUNT(*) FROM messages WHERE lead_id=l.id)::int as message_count
-       FROM leads l WHERE l.company_id=$1 ORDER BY l.id DESC`,
-      [req.companyId]
-    );
-    // Return with empty messages array so frontend doesn't break
-    ok(res, result.rows.map(l => ({ ...l, messages: [] })));
+    const [dataResult, countResult] = await Promise.all([
+      pool.query(
+        `SELECT l.*,
+          (SELECT text FROM messages WHERE lead_id=l.id ORDER BY id DESC LIMIT 1) as last_message,
+          (SELECT COUNT(*) FROM messages WHERE lead_id=l.id)::int as message_count
+         FROM leads l WHERE l.company_id=$1 ORDER BY l.id DESC LIMIT $2 OFFSET $3`,
+        [req.companyId, limit, offset]
+      ),
+      pool.query(
+        'SELECT COUNT(*)::int as total FROM leads WHERE company_id=$1',
+        [req.companyId]
+      ),
+    ]);
+
+    ok(res, {
+      leads: dataResult.rows.map(l => ({ ...l, messages: [] })),
+      total: countResult.rows[0].total,
+      page,
+      limit,
+    });
   } catch (err) {
     console.error(err);
     fail(res, 'Erro interno.', 500);
