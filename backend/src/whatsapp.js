@@ -39,6 +39,13 @@ function normalizePhone(phone) {
   return phone.replace(/\D/g, '') || null;
 }
 
+// Verifica se parece um telefone real (E.164 max 15 dígitos).
+// LIDs do WhatsApp têm 16+ dígitos — não são telefones.
+function isRealPhone(phone) {
+  const d = normalizePhone(phone);
+  return !!d && d.length >= 8 && d.length <= 15;
+}
+
 // Retorna variantes do número para busca (com/sem DDI 55)
 function phoneVariants(phone) {
   const d = normalizePhone(phone);
@@ -291,8 +298,9 @@ async function connectWhatsApp(companyId) {
             if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
             // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
             const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
-            // Resolve LID → telefone real via mapa em memória
-            const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
+            // Resolve LID → telefone real. Se não resolveu e rawPhone é LID (>15 dígitos), descarta.
+            const resolvedFromMe = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
+            const phone = resolvedFromMe || (isRealPhone(rawPhone) ? rawPhone : null);
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
             const msgId = msg.key.id;
@@ -336,9 +344,10 @@ async function connectWhatsApp(companyId) {
         if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
         // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
         const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
-        // Resolve LID → telefone real via mapa em memória
-        const phone = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, '')) || rawPhone;
-        if (!phone) continue;
+        // Resolve LID → telefone real. Se não resolveu e rawPhone é LID (>15 dígitos), usa null.
+        const resolved = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
+        const phone = resolved || (isRealPhone(rawPhone) ? rawPhone : null);
+        if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone); continue; }
         // Extrair texto ou label de mídia
         const text = msg.message?.conversation
           || msg.message?.extendedTextMessage?.text
