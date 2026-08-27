@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  LayoutGrid, Users, Zap, Settings, Search, Plus, X, Send, Phone, Building2,
-  Flame, Snowflake, Trash2, MessageCircle, LogOut, Loader2, Smartphone,
-  Pencil, DollarSign, Edit2, Check, BarChart2, TrendingUp, TrendingDown,
+  Zap, Search, Plus, X, Send, Phone,
+  Trash2, Loader2, Smartphone,
+  Pencil, Check, BarChart2, TrendingUp, TrendingDown,
   Activity, MessageSquare, ChevronRight, Calendar, FileText,
 } from "lucide-react";
 import FlowCanvas from "./FlowCanvas";
 import AdminPanel from "./AdminPanel";
+import Sidebar from "./components/Sidebar";
+import Pipeline from "./components/Pipeline";
+import ChatPanel from "./components/ChatPanel";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -310,15 +313,6 @@ export default function PulsoCRM() {
   function handleDragStart(e, leadId) { e.dataTransfer.setData("text/plain", String(leadId)); }
   function handleDrop(e, stageId) { e.preventDefault(); const leadId = Number(e.dataTransfer.getData("text/plain")); if (!leadId) return; moveLead(leadId, stageId); }
 
-  async function sendMessage() {
-    if (!chatInput.trim() || !selectedLeadId) return;
-    const text = chatInput.trim(); const targetId = selectedLeadId; setChatInput("");
-    try {
-      const message = await apiFetch(`/leads/${targetId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
-      setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l)));
-    } catch (err) { addToast(`Não consegui enviar a mensagem: ${err.message}`); }
-  }
-
   async function addLead() {
     if (!newLeadForm.name.trim()) return;
     try {
@@ -507,36 +501,14 @@ export default function PulsoCRM() {
       <style>{sharedStyle}</style>
 
       {/* Sidebar */}
-      <aside style={{ width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16, paddingBottom: 16, background: '#0A0B0F', borderRight: `1px solid ${BORDER}`, gap: 0 }}>
-        {/* Logo */}
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', position: 'relative', marginBottom: 20, boxShadow: `0 0 16px rgba(99,102,241,0.35)`, flexShrink: 0 }}>
-          P
-          <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#FB923C', animation: 'pulso-pulse 2s ease-in-out infinite', border: '1.5px solid #0A0B0F' }} />
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', alignItems: 'center', flex: 1 }}>
-          <SideBtn active={view === "dashboard"} onClick={() => setView("dashboard")} icon={<BarChart2 size={18} strokeWidth={1.5} />} title="Dashboard" />
-          <SideBtn active={view === "pipeline"} onClick={() => setView("pipeline")} icon={<LayoutGrid size={18} strokeWidth={1.5} />} title="Pipeline" />
-          <SideBtn active={view === "contatos"} onClick={() => setView("contatos")} icon={<Users size={18} strokeWidth={1.5} />} title="Contatos" />
-          <SideBtn active={view === "automacoes"} onClick={() => setView("automacoes")} icon={<Zap size={18} strokeWidth={1.5} />} title="Automações" />
-          <SideBtn active={view === "conversas"} onClick={() => { setView("conversas"); setConvLeadId(null); }} icon={<MessageSquare size={18} strokeWidth={1.5} />} title="Conversas" />
-          <SideBtn active={view === "whatsapp"} onClick={() => setView("whatsapp")} icon={<Smartphone size={18} strokeWidth={1.5} />} title="WhatsApp" />
-          <SideBtn active={view === "configuracoes"} onClick={() => setView("configuracoes")} icon={<Settings size={18} strokeWidth={1.5} />} title="Configurações" />
-          {isAdmin && (
-            <SideBtn active={view === "clientes"} onClick={() => setView("clientes")} icon={<Building2 size={18} strokeWidth={1.5} />} title="Clientes (Admin)" />
-          )}
-        </nav>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <button title="Sair" onClick={logout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6, display: 'flex', transition: 'color 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = TEXT} onMouseLeave={e => e.currentTarget.style.color = SUBTLE}>
-            <LogOut size={16} strokeWidth={1.5} />
-          </button>
-          <div title={company?.name} style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(99,102,241,0.15)', border: `1px solid rgba(99,102,241,0.3)`, color: '#818CF8', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {(company?.name || "?").slice(0, 2).toUpperCase()}
-          </div>
-        </div>
-      </aside>
+      <Sidebar
+        view={view}
+        setView={setView}
+        isAdmin={isAdmin}
+        onLogout={logout}
+        companyName={company?.name}
+        onConversasClick={() => { setView("conversas"); setConvLeadId(null); }}
+      />
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -718,74 +690,15 @@ export default function PulsoCRM() {
           )}
 
           {/* Pipeline */}
-          {view === "pipeline" && (() => {
-            const pipelineTotal = filteredLeads.reduce((s, l) => s + Number(l.value || 0), 0);
-            return (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                {/* Pipeline summary bar */}
-                <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, background: SURFACE }}>
-                  <span style={{ fontSize: 12, color: SUBTLE }}>
-                    <span style={{ color: TEXT, fontWeight: 700 }}>{filteredLeads.length}</span> leads
-                  </span>
-                  <span style={{ fontSize: 12, color: SUBTLE }}>
-                    Total: <span className="pulso-mono" style={{ color: TEXT, fontWeight: 700 }}>{formatBRL(pipelineTotal)}</span>
-                  </span>
-                  {/* Mini stage distribution bar */}
-                  <div style={{ flex: 1, height: 4, borderRadius: 99, display: 'flex', overflow: 'hidden', gap: 1, maxWidth: 320 }}>
-                    {STAGES.map(s => {
-                      const c = stageColor(s);
-                      const pct = filteredLeads.length > 0 ? (filteredLeads.filter(l => l.stage === s.id).length / filteredLeads.length) * 100 : 0;
-                      return pct > 0 ? <div key={s.id} style={{ height: '100%', background: c, width: `${pct}%`, transition: 'width 0.4s ease' }} title={`${s.name}: ${Math.round(pct)}%`} /> : null;
-                    })}
-                  </div>
-                </div>
-
-                {/* Columns */}
-                <div style={{ flex: 1, overflowX: 'auto', padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  {STAGES.map((stage) => {
-                    const stageLeads = filteredLeads.filter((l) => l.stage === stage.id);
-                    const total = stageLeads.reduce((s, l) => s + Number(l.value || 0), 0);
-                    const color = stageColor(stage);
-                    const pct = pipelineTotal > 0 ? (total / pipelineTotal) * 100 : 0;
-                    return (
-                      <div key={stage.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, stage.id)}
-                        style={{ width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', maxHeight: '100%' }}>
-
-                        {/* Column header */}
-                        <div style={{ borderTop: `3px solid ${color}`, padding: '12px 14px 10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{stage.name}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, background: color + '22', color, borderRadius: 99, padding: '2px 9px', minWidth: 22, textAlign: 'center' }}>{stageLeads.length}</span>
-                          </div>
-                          <p className="pulso-mono" style={{ fontSize: 16, fontWeight: 700, color: TEXT, margin: '0 0 6px' }}>{formatBRL(total)}</p>
-                          {/* Value progress bar */}
-                          <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 99, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', background: color, width: `${pct}%`, borderRadius: 99, transition: 'width 0.5s ease' }} />
-                          </div>
-                          <p style={{ fontSize: 10, color: SUBTLE, margin: '4px 0 0' }}>{Math.round(pct)}% do pipeline</p>
-                        </div>
-
-                        {/* Cards */}
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80 }}>
-                          {stageLeads.map((lead, idx) => (
-                            <div key={lead.id} className="pulso-fade-up" style={{ animationDelay: `${idx * 0.04}s` }}>
-                              <LeadCard lead={lead} color={color} stage={stage} onDragStart={handleDragStart} onClick={() => setSelectedLeadId(lead.id)} onOpenConv={() => { setConvLeadId(lead.id); setView('conversas'); }} />
-                            </div>
-                          ))}
-                          {stageLeads.length === 0 && (
-                            <div style={{ fontSize: 11, color: SUBTLE, textAlign: 'center', padding: '24px 0', border: `1px dashed rgba(255,255,255,0.07)`, borderRadius: 10, marginTop: 2 }}>
-                              <div style={{ fontSize: 18, marginBottom: 4, opacity: 0.3 }}>↓</div>
-                              Solte um lead aqui
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
+          {view === "pipeline" && (
+            <Pipeline
+              leads={filteredLeads}
+              onLeadClick={(id) => setSelectedLeadId(id)}
+              onOpenConv={(id) => { setConvLeadId(id); setView('conversas'); }}
+              onDragStart={handleDragStart}
+              onDrop={handleDrop}
+            />
+          )}
 
           {/* Contatos */}
           {view === "contatos" && (
@@ -989,117 +902,20 @@ export default function PulsoCRM() {
 
       {/* Lead drawer */}
       {selectedLead && view !== 'conversas' && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setSelectedLeadId(null)} />
-          <div style={{ position: 'relative', width: 380, height: '100%', background: SURFACE, borderLeft: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', boxShadow: '-24px 0 64px rgba(0,0,0,0.5)' }}>
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
-                    {selectedLead.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: TEXT }}>{selectedLead.name}</p>
-                    {editingLeadField?.field === 'phone' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <input type="text" autoFocus className="pulso-input" style={{ fontSize: 12, width: 140 }} defaultValue={(selectedLead.phone || "").replace(/@.*$/, "")}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(selectedLead.id, { phone: e.target.value }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
-                        <button onClick={(e) => { updateLead(selectedLead.id, { phone: e.currentTarget.previousSibling.value }); setEditingLeadField(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS }}><Check size={13} /></button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setEditingLeadField({ field: 'phone' })} style={{ fontSize: 11, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
-                        <Phone size={10} /> {formatPhone(selectedLead.phone) || 'Sem telefone'}
-                        <Edit2 size={9} style={{ opacity: 0.5 }} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button onClick={() => deleteLead(selectedLead.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6 }} title="Excluir lead">
-                    <Trash2 size={14} />
-                  </button>
-                  <button onClick={() => setSelectedLeadId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUBTLE, padding: 6, borderRadius: 6 }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <DollarSign size={12} style={{ color: SUBTLE }} />
-                {editingLeadField?.field === 'value' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                    <input type="number" autoFocus className="pulso-input" style={{ flex: 1, fontSize: 13 }} defaultValue={selectedLead.value || 0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { updateLead(selectedLead.id, { value: Number(e.target.value) }); setEditingLeadField(null); } if (e.key === 'Escape') setEditingLeadField(null); }} />
-                    <button onClick={(e) => { const input = e.currentTarget.previousSibling; updateLead(selectedLead.id, { value: Number(input.value) }); setEditingLeadField(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUCCESS }}><Check size={14} /></button>
-                  </div>
-                ) : (
-                  <button onClick={() => setEditingLeadField({ field: 'value', value: selectedLead.value })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                    <span className="pulso-mono" style={{ fontSize: 14, fontWeight: 700, color: PRIMARY }}>{formatBRL(selectedLead.value)}</span>
-                    <Edit2 size={10} style={{ color: SUBTLE, opacity: 0.6 }} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: SUBTLE }}>
-              <Building2 size={11} /> {selectedLead.company_name}
-              <span style={{ margin: '0 4px' }}>·</span>
-              <MessageCircle size={11} /> WhatsApp
-            </div>
-
-            {/* Tags */}
-            <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-              {(selectedLead.tags || []).map(tag => (
-                <span key={tag} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: PRIMARY + '22', color: '#818CF8' }}>
-                  {tag}
-                  <button onClick={() => updateLead(selectedLead.id, { tags: (selectedLead.tags || []).filter(t => t !== tag) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, lineHeight: 1 }}>×</button>
-                </span>
-              ))}
-              <TagInput onAdd={tag => { const current = selectedLead.tags || []; if (!current.includes(tag)) updateLead(selectedLead.id, { tags: [...current, tag] }); }} />
-            </div>
-
-            {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, background: BG }}>
-              {selectedLead.messages.map((m) => {
-                if (m.from_type === "system") return <div key={m.id} style={{ textAlign: 'center', fontSize: 11, color: SUBTLE, fontStyle: 'italic' }}>{m.text}</div>;
-                const mine = m.from_type === "me";
-                return (
-                  <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ maxWidth: '75%', borderRadius: 12, padding: '8px 12px', fontSize: 13, background: mine ? PRIMARY : SURFACE, color: mine ? '#fff' : TEXT, border: mine ? 'none' : `1px solid ${BORDER}`, borderBottomRightRadius: mine ? 3 : 12, borderBottomLeftRadius: mine ? 12 : 3 }}>
-                      <p style={{ margin: 0 }}>{m.text}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Templates */}
-            {templates.length > 0 && (
-              <div style={{ padding: '8px 12px 0', background: SURFACE, position: 'relative' }}>
-                <button onClick={() => setShowTemplatesDropdown(v => !v)} style={{ fontSize: 11, color: SUBTLE, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <FileText size={11} /> Templates {showTemplatesDropdown ? '▲' : '▼'}
-                </button>
-                {showTemplatesDropdown && (
-                  <div style={{ position: 'absolute', bottom: 32, left: 12, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 10, zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-                    {templates.map(t => (
-                      <button key={t.id} onClick={() => { setChatInput(t.text); setShowTemplatesDropdown(false); }} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: TEXT, margin: 0 }}>{t.name}</p>
-                        <p style={{ fontSize: 11, color: SUBTLE, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={{ padding: 12, borderTop: `1px solid ${BORDER}`, background: SURFACE, display: 'flex', gap: 8 }}>
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Escreva uma mensagem..." className="pulso-input" style={{ flex: 1 }} />
-              <button onClick={sendMessage} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                <Send size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChatPanel
+          lead={selectedLead}
+          onClose={() => setSelectedLeadId(null)}
+          onSend={async (text) => {
+            const targetId = selectedLeadId;
+            try {
+              const message = await apiFetch(`/leads/${targetId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+              setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l)));
+            } catch (err) { addToast(`Não consegui enviar a mensagem: ${err.message}`); }
+          }}
+          onUpdate={(fields) => updateLead(selectedLead.id, fields)}
+          onDelete={() => deleteLead(selectedLead.id)}
+          templates={templates}
+        />
       )}
 
       {/* New Lead modal */}
@@ -1192,101 +1008,6 @@ export default function PulsoCRM() {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function SideBtn({ active, onClick, icon, title }) {
-  return (
-    <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3px 0' }}>
-      {active && <span style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 22, borderRadius: '0 3px 3px 0', background: PRIMARY }} />}
-      <button
-        title={title}
-        onClick={onClick}
-        style={{
-          width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: active ? 'rgba(99,102,241,0.14)' : 'transparent',
-          color: active ? '#818CF8' : 'rgba(148,163,184,0.45)',
-          border: 'none', cursor: 'pointer',
-          transition: 'background 0.15s, color 0.15s',
-        }}
-        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(148,163,184,0.8)'; }}}
-        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(148,163,184,0.45)'; }}}
-      >
-        {icon}
-      </button>
-    </div>
-  );
-}
-
-function LeadCard({ lead, color, stage, onDragStart, onClick, onOpenConv }) {
-  const lastMsg = lead.messages[lead.messages.length - 1];
-  const tags = lead.tags || [];
-  const initials = lead.name.split(' ').map(p => p[0]).slice(0,2).join('');
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, lead.id)}
-      onClick={onClick}
-      className="pulso-lead-card"
-      style={{ padding: 0, overflow: 'hidden', borderLeft: `3px solid ${color}` }}
-    >
-      {/* Card body */}
-      <div style={{ padding: '10px 12px 8px' }}>
-        {/* Top row: avatar + name + value */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: color + '28', display: 'flex', alignItems: 'center', justifyContent: 'center', color, fontSize: 11, fontWeight: 800, flexShrink: 0, border: `1px solid ${color}44` }}>{initials}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{lead.name}</p>
-              {stage.temp === 1 ? <Flame size={11} strokeWidth={1.5} style={{ color, flexShrink: 0 }} /> : stage.temp === 0 ? <Snowflake size={11} strokeWidth={1.5} style={{ color, flexShrink: 0 }} /> : null}
-            </div>
-            {lead.company_name && (
-              <p style={{ fontSize: 10, color: SUBTLE, margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Value pill */}
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="pulso-mono" style={{ fontSize: 13, fontWeight: 800, color, letterSpacing: '-0.02em' }}>{formatBRL(lead.value)}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {lead.created_at && (
-              <span style={{ fontSize: 10, color: SUBTLE, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Calendar size={9} strokeWidth={1.5} />{formatDate(lead.created_at)}
-              </span>
-            )}
-            {lead.phone && (
-              <button
-                onClick={e => { e.stopPropagation(); onOpenConv && onOpenConv(); }}
-                style={{ background: SUCCESS + '18', border: `1px solid ${SUCCESS}33`, borderRadius: 6, cursor: 'pointer', color: SUCCESS, padding: '3px 5px', display: 'flex', alignItems: 'center' }}
-                title="Abrir conversa"
-              >
-                <MessageCircle size={11} strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Tags */}
-        {tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-            {tags.map(tag => (
-              <span key={tag} style={{ padding: '1px 7px', borderRadius: 99, fontSize: 9, fontWeight: 700, background: color + '20', color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tag}</span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Last message footer */}
-      {lastMsg && lastMsg.from_type !== 'system' && (
-        <div style={{ padding: '6px 12px', borderTop: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <MessageSquare size={9} strokeWidth={1.5} style={{ color: SUBTLE, flexShrink: 0 }} />
-          <p style={{ fontSize: 10, color: SUBTLE, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: 'italic' }}>
-            {lastMsg.from_type === 'me' ? 'Você: ' : ''}{lastMsg.text}
-          </p>
-        </div>
-      )}
     </div>
   );
 }
