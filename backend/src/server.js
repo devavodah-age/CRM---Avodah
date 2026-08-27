@@ -38,6 +38,14 @@ const authLimiter = rateLimit({
   message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em 1 minuto.' },
+});
+
 // Wire up WhatsApp sender so automations can send real messages
 setWhatsAppSender(sendMessage);
 
@@ -49,12 +57,12 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/auth", authLimiter, authRoutes);
-app.use("/api/leads", requireAuth, leadsRoutes);
-app.use("/api/automations", requireAuth, automationsRoutes);
-app.use("/api/whatsapp", requireAuth, whatsappRoutes);
-app.use("/api/settings", requireAuth, settingsRoutes);
-app.use("/api/templates", requireAuth, templatesRoutes);
-app.use("/api/companies", requireAuth, companiesRoutes);
+app.use("/api/leads",       apiLimiter, requireAuth, leadsRoutes);
+app.use("/api/automations", apiLimiter, requireAuth, automationsRoutes);
+app.use("/api/whatsapp",    apiLimiter, requireAuth, whatsappRoutes);
+app.use("/api/settings",    apiLimiter, requireAuth, settingsRoutes);
+app.use("/api/templates",   apiLimiter, requireAuth, templatesRoutes);
+app.use("/api/companies",   apiLimiter, requireAuth, companiesRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
