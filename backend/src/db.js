@@ -94,6 +94,10 @@ async function initDb() {
   await pool.query(`
     ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
   `).catch(() => {});
+  // Persist LID→phone map across restarts
+  await pool.query(`
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS lid_map JSONB DEFAULT '{}';
+  `).catch(() => {});
   // Index for company-scoped lead lookups
   await pool.query(`
     CREATE INDEX IF NOT EXISTS leads_company_id_idx ON leads(company_id);

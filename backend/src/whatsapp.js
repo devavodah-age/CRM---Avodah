@@ -60,13 +60,13 @@ const connections = new Map();
 
 async function loadAuthState(companyId) {
   try {
-    const res = await pool.query('SELECT creds, keys FROM whatsapp_sessions WHERE company_id = $1', [companyId]);
-    if (!res.rows.length) return { creds: null, keys: {} };
-    // Restore Buffer objects lost during JSONB serialization
+    const res = await pool.query('SELECT creds, keys, lid_map FROM whatsapp_sessions WHERE company_id = $1', [companyId]);
+    if (!res.rows.length) return { creds: null, keys: {}, lidMap: {} };
     const creds = res.rows[0].creds ? restoreBuffers(res.rows[0].creds) : null;
     const keys = restoreBuffers(res.rows[0].keys || {});
-    return { creds, keys };
-  } catch (e) { console.error('[WA] loadAuthState error:', e.message); return { creds: null, keys: {} }; }
+    const lidMap = res.rows[0].lid_map || {};
+    return { creds, keys, lidMap };
+  } catch (e) { console.error('[WA] loadAuthState error:', e.message); return { creds: null, keys: {}, lidMap: {} }; }
 }
 
 async function clearAuthState(companyId) {
@@ -134,9 +134,9 @@ async function connectWhatsApp(companyId) {
     try { existing.socket.end(undefined); } catch {}
   }
 
-  const { creds: savedCreds, keys: savedKeys } = await loadAuthState(companyId);
+  const { creds: savedCreds, keys: savedKeys, lidMap: savedLidMap } = await loadAuthState(companyId);
   const freshCreds = savedCreds || initAuthCreds();
-  console.log('[WA] Auth state loaded, hasSavedCreds:', !!savedCreds);
+  console.log('[WA] Auth state loaded, hasSavedCreds:', !!savedCreds, 'lidMap entries:', Object.keys(savedLidMap).length);
 
   let version;
   try {
@@ -148,7 +148,8 @@ async function connectWhatsApp(companyId) {
     version = [2, 3000, 1015901307];
   }
 
-  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds, lidToPhone: new Map() };
+  // Restore persisted LID→phone map from DB (survives Railway restarts)
+  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds, lidToPhone: new Map(Object.entries(savedLidMap)) };
   connections.set(companyId, conn);
 
   const logger = pino({ level: 'silent' });
@@ -253,23 +254,48 @@ async function connectWhatsApp(companyId) {
     }
 
     // Processa um contato do evento contacts.upsert/update:
-    // mapeia LID -> telefone real e atualiza leads com telefone errado no banco
+    // mapeia LID -> telefone real, persiste no DB, e corrige leads com LID errado
     async function resolveContact(contact) {
-      if (!contact.id || !contact.id.endsWith('@s.whatsapp.net')) return;
-      const realPhone = contact.id.replace('@s.whatsapp.net', '');
-      if (!realPhone || realPhone.length < 8) return;
-      const lid = extractLid(contact.lid);
+      if (!contact.id) return;
+      let realPhone, lid;
+
+      if (contact.id.endsWith('@s.whatsapp.net')) {
+        // Formato normal: id = telefone, lid = identificador LID
+        realPhone = contact.id.replace('@s.whatsapp.net', '');
+        lid = extractLid(contact.lid);
+      } else if (contact.id.endsWith('@lid') && contact.phone) {
+        // Formato inverso: id = LID, phone = telefone real (alguns clientes Baileys)
+        lid = contact.id.replace('@lid', '');
+        realPhone = normalizePhone(contact.phone);
+      } else {
+        return;
+      }
+
+      if (!realPhone || realPhone.length < 8 || realPhone.length > 15) return;
       if (!lid) return;
-      // Armazena no mapa em memória
+
+      const lidDigits = lid.replace(/\D/g, '');
       conn.lidToPhone.set(lid, realPhone);
-      conn.lidToPhone.set(lid.replace(/\D/g, ''), realPhone);
+      conn.lidToPhone.set(lidDigits, realPhone);
       console.log(`[WA] LID mapeado: ${lid} → ${realPhone}`);
-      // Atualiza leads que estão com o número errado (LID como telefone)
+
+      // Persiste no banco para sobreviver a restarts
+      try {
+        await pool.query(
+          `INSERT INTO whatsapp_sessions (company_id, lid_map, updated_at) VALUES ($1, $2::jsonb, NOW())
+           ON CONFLICT (company_id) DO UPDATE
+             SET lid_map = COALESCE(whatsapp_sessions.lid_map, '{}'::jsonb) || $2::jsonb,
+                 updated_at = NOW()`,
+          [companyId, JSON.stringify({ [lid]: realPhone, [lidDigits]: realPhone })]
+        );
+      } catch (e) { console.error('[WA] resolveContact persist error:', e.message); }
+
+      // Corrige leads que têm o LID como telefone (criados antes do fix)
       try {
         const { rowCount } = await pool.query(
           `UPDATE leads SET phone=$1 WHERE company_id=$2
            AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $3`,
-          [realPhone, companyId, lid.replace(/\D/g, '')]
+          [realPhone, companyId, lidDigits]
         );
         if (rowCount > 0) console.log(`[WA] ${rowCount} lead(s) corrigidos: LID ${lid} → ${realPhone}`);
       } catch (e) { console.error('[WA] resolveContact update error:', e.message); }
@@ -294,13 +320,13 @@ async function connectWhatsApp(companyId) {
         if (msg.key.fromMe) {
           try {
             const remoteJid = msg.key.remoteJid || '';
-            // Aceita apenas JIDs de contato individual real
-            if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
+            // Aceita contatos individuais: @s.whatsapp.net, @c.us e @lid (LID-based)
+            if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us') && !remoteJid.endsWith('@lid')) continue;
             // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
             const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
-            // Resolve LID → telefone real. Se não resolveu e rawPhone é LID (>15 dígitos), descarta.
             const resolvedFromMe = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
-            const phone = resolvedFromMe || (isRealPhone(rawPhone) ? rawPhone : null);
+            // @lid JID DEVE ser resolvido; @s.whatsapp.net aceita telefone real direto
+            const phone = resolvedFromMe || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (!text) continue;
             const msgId = msg.key.id;
@@ -340,14 +366,13 @@ async function connectWhatsApp(companyId) {
         if (msgId && processedMsgIds.has(msgId)) continue;
         if (msgId) processedMsgIds.add(msgId);
         const remoteJid = msg.key.remoteJid || '';
-        // Aceita apenas JIDs de contato individual (@s.whatsapp.net ou @c.us)
-        if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us')) continue;
+        // Aceita contatos individuais: @s.whatsapp.net, @c.us e @lid (LID-based)
+        if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us') && !remoteJid.endsWith('@lid')) continue;
         // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
         const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
-        // Resolve LID → telefone real. Se não resolveu e rawPhone é LID (>15 dígitos), usa null.
         const resolved = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
-        const phone = resolved || (isRealPhone(rawPhone) ? rawPhone : null);
-        if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone); continue; }
+        const phone = resolved || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
+        if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone, '— JID:', remoteJid.split('@')[1]); continue; }
         // Extrair texto ou label de mídia
         const text = msg.message?.conversation
           || msg.message?.extendedTextMessage?.text
@@ -461,4 +486,24 @@ function getStatus(companyId) {
   return { status: conn?.status || 'disconnected', qrDataUrl: conn?.qrDataUrl || null };
 }
 
-module.exports = { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus };
+// Corrige manualmente todos os leads da empresa que têm LID como telefone,
+// usando o mapa em memória (populado pelo contacts.upsert). Retorna o total de leads corrigidos.
+async function fixLeadPhones(companyId) {
+  const conn = connections.get(companyId);
+  if (!conn || conn.lidToPhone.size === 0) return 0;
+  let fixed = 0;
+  for (const [lid, phone] of conn.lidToPhone) {
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE leads SET phone=$1 WHERE company_id=$2
+         AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $3`,
+        [phone, companyId, lid.replace(/\D/g, '')]
+      );
+      fixed += rowCount;
+    } catch {}
+  }
+  if (fixed > 0) console.log(`[WA] fixLeadPhones: ${fixed} lead(s) corrigidos para empresa ${companyId}`);
+  return fixed;
+}
+
+module.exports = { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, fixLeadPhones };

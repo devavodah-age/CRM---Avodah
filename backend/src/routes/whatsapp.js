@@ -1,5 +1,5 @@
 const express = require('express');
-const { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus } = require('../whatsapp');
+const { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, fixLeadPhones } = require('../whatsapp');
 const pool = require('../db');
 
 const router = express.Router();
@@ -36,6 +36,16 @@ router.post('/send', async (req, res) => {
   try {
     await sendMessage(companyId, phone, text);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /fix-phones — corrige leads com LID como telefone usando o mapa em memória
+router.post('/fix-phones', async (req, res) => {
+  try {
+    const fixed = await fixLeadPhones(req.companyId);
+    res.json({ ok: true, fixed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
