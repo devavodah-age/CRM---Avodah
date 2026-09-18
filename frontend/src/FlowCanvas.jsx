@@ -11,14 +11,14 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { X, Plus, Zap, MessageCircle, Clock, ArrowRight, StickyNote } from 'lucide-react';
+import { BG, SURFACE, SURFACE2, PRIMARY, TEXT, MUTED, SUBTLE, BORDER } from './tokens';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
-const BG_MAIN    = '#F5F6FA';
-const BG_CARD    = '#FFFFFF';
-const BG_SIDEBAR = '#FFFFFF';
-const BORDER     = '#E5E7EB';
-const TEXT_PRI   = '#14171F';
-const TEXT_SEC   = '#6B7280';
+const BG_MAIN    = BG;
+const BG_CARD    = SURFACE2;
+const BG_SIDEBAR = SURFACE;
+const TEXT_PRI   = TEXT;
+const TEXT_SEC   = MUTED;
 
 const TYPE_META = {
   trigger_new_lead:          { color: '#238636', label: 'Novo Lead',           icon: <Zap size={13} /> },
@@ -43,8 +43,8 @@ const STAGES_LIST = [
 const DEFAULT_EDGE = {
   type: 'smoothstep',
   animated: true,
-  style: { stroke: '#4F3CC9', strokeWidth: 1.5 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#4F3CC9' },
+  style: { stroke: PRIMARY, strokeWidth: 1.5 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: PRIMARY },
 };
 
 // ─── Shared node shell ───────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ function NodeShell({ id, accentColor, title, icon, children, data }) {
       fontFamily: 'Inter, sans-serif',
       fontSize: 13,
       color: TEXT_PRI,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      boxShadow: '0 12px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
       position: 'relative',
     }}>
       {/* Colored top strip */}
@@ -89,7 +89,7 @@ function NodeShell({ id, accentColor, title, icon, children, data }) {
       <Handle
         type="target"
         position={Position.Top}
-        style={{ width: 10, height: 10, background: '#4F3CC9', border: `2px solid ${BG_CARD}`, top: -6 }}
+        style={{ width: 10, height: 10, background: PRIMARY, border: `2px solid ${BG_CARD}`, top: -6 }}
       />
       <Handle
         type="source"
@@ -243,8 +243,8 @@ function AddNoteNode({ id, data }) {
 
 const inputStyle = {
   width: '100%',
-  background: '#F9FAFB',
-  border: `1px solid ${BORDER}`,
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: 5,
   color: TEXT_PRI,
   fontSize: 12,
@@ -442,7 +442,7 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
         {/* Logo mark */}
         <div style={{
           width: 28, height: 28, borderRadius: 8,
-          background: '#4F3CC9',
+          background: PRIMARY,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontWeight: 700, fontSize: 13,
         }}>P</div>
@@ -485,7 +485,7 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
         <button
           onClick={handleSave}
           style={{
-            background: '#4F3CC9',
+            background: PRIMARY,
             border: 'none',
             borderRadius: 7,
             color: '#fff',
@@ -567,19 +567,20 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             marginTop: 12,
             padding: '10px 10px',
             borderRadius: 7,
-            background: '#F3F4F6',
+            background: 'rgba(255,255,255,0.025)',
             border: `1px solid ${BORDER}`,
             fontSize: 11,
             color: TEXT_SEC,
             lineHeight: 1.5,
           }}>
-            <span style={{ fontWeight: 600, color: '#4F3CC9' }}>Dica:</span> Arraste um bloco para o canvas. Conecte os nós puxando do círculo inferior de um para o superior do próximo.
+            <span style={{ fontWeight: 600, color: '#818CF8' }}>Dica:</span> Arraste um bloco para o canvas. Conecte os nós puxando do círculo inferior de um para o superior do próximo.
           </div>
         </aside>
 
         {/* ── Canvas ── */}
         <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
           <ReactFlow
+            className="pulso-flow-editor"
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -595,14 +596,14 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             deleteKeyCode="Delete"
           >
             <Background
-              color="#E5E7EB"
+              color="rgba(148,163,184,0.18)"
               gap={20}
               size={1}
               style={{ background: BG_MAIN }}
             />
             <Controls
               style={{
-                background: '#fff',
+                background: SURFACE,
                 border: `1px solid ${BORDER}`,
                 borderRadius: 8,
               }}
@@ -622,8 +623,8 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
             }}>
               <div style={{
                 width: 56, height: 56, borderRadius: 16,
-                background: '#EDE9FE',
-                border: `1px dashed #C4B5FD`,
+                background: 'rgba(99,102,241,0.12)',
+                border: '1px dashed rgba(129,140,248,0.45)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 margin: '0 auto 12px',
               }}>
@@ -632,7 +633,7 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
               <p style={{ fontSize: 14, fontWeight: 500, color: TEXT_SEC, marginBottom: 4 }}>
                 Arraste um gatilho do painel lateral para começar
               </p>
-              <p style={{ fontSize: 12, color: '#9CA3AF' }}>
+              <p style={{ fontSize: 12, color: SUBTLE }}>
                 Conecte os nós para criar o fluxo de automação
               </p>
             </div>
