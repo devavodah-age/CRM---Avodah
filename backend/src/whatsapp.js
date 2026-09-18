@@ -453,7 +453,9 @@ async function connectWhatsApp(companyId) {
             );
             if (leadResult.rows.length) {
               await pool.query(
-                "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'me',$2,$3) ON CONFLICT (wa_msg_id) DO NOTHING",
+                `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
+                 VALUES ($1,'me',$2,$3)
+                 ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING`,
                 [leadResult.rows[0].id, text, msgId || null]
               );
             }
@@ -552,7 +554,9 @@ async function connectWhatsApp(companyId) {
             }).catch(console.error);
           }
           await pool.query(
-            "INSERT INTO messages (lead_id, from_type, text, wa_msg_id) VALUES ($1,'lead',$2,$3) ON CONFLICT (wa_msg_id) DO NOTHING",
+            `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
+             VALUES ($1,'lead',$2,$3)
+             ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING`,
             [leadId, text, msgId || null]
           );
           enqueueN8nEvent(companyId, 'message_received', {
