@@ -175,6 +175,8 @@ export default function PulsoCRM() {
   const [waStatus, setWaStatus] = useState('disconnected');
   const [waQr, setWaQr] = useState(null);
   const [waPolling, setWaPolling] = useState(false);
+  const [waContacts, setWaContacts] = useState([]);
+  const [selectedWaContacts, setSelectedWaContacts] = useState([]);
   const [editingLeadField, setEditingLeadField] = useState(null);
   const [settings, setSettings] = useState({ pixel_id: '', capi_token_set: false });
   const [settingsForm, setSettingsForm] = useState({ pixel_id: '', capi_token: '' });
@@ -383,6 +385,20 @@ export default function PulsoCRM() {
       await fetch(`${API_URL}/whatsapp/disconnect`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       setWaStatus('disconnected'); setWaQr(null); setWaPolling(false);
     } catch {}
+  }
+
+  async function loadWhatsAppContacts() {
+    try { setWaContacts(await apiFetch('/whatsapp/contacts')); }
+    catch (err) { addToast(`Erro ao carregar contatos do WhatsApp: ${err.message}`); }
+  }
+
+  async function importWhatsAppContacts() {
+    if (!selectedWaContacts.length) return;
+    try {
+      const result = await apiFetch('/whatsapp/contacts/import', { method: 'POST', body: JSON.stringify({ contactIds: selectedWaContacts }) });
+      setSelectedWaContacts([]); await loadData();
+      addToast(`${result.imported} contato(s) importado(s) como lead.`);
+    } catch (err) { addToast(`Erro ao importar contatos: ${err.message}`); }
   }
 
   async function updateLead(leadId, fields) {
@@ -850,6 +866,17 @@ export default function PulsoCRM() {
                   <button onClick={disconnectWhatsApp} style={{ background: 'rgba(244,63,94,0.1)', color: DANGER, border: `1px solid rgba(244,63,94,0.2)`, borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     Desconectar
                   </button>
+                  <div style={{ marginTop: 24, borderTop: `1px solid ${BORDER}`, paddingTop: 18 }}>
+                    <h3 style={{ margin: '0 0 5px', color: TEXT, fontSize: 14 }}>Contatos detectados</h3>
+                    <p style={{ margin: '0 0 12px', color: SUBTLE, fontSize: 12 }}>Importe contatos que o WhatsApp revelou durante a conexão.</p>
+                    <button onClick={loadWhatsAppContacts} style={{ background: 'rgba(255,255,255,0.05)', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>Sincronizar contatos</button>
+                    {waContacts.length > 0 && <>
+                      <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 10, border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                        {waContacts.filter(c => c.phone).map(contact => <label key={contact.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, color: TEXT, fontSize: 12 }}><input type="checkbox" checked={selectedWaContacts.includes(contact.id)} onChange={e => setSelectedWaContacts(current => e.target.checked ? [...current, contact.id] : current.filter(id => id !== contact.id))} /><span>{contact.name || contact.phone}<small style={{ display: 'block', color: SUBTLE }}>{contact.phone}{contact.imported_lead_id ? ' · já importado' : ''}</small></span></label>)}
+                      </div>
+                      <button onClick={importWhatsAppContacts} disabled={!selectedWaContacts.length} style={{ marginTop: 10, background: PRIMARY, color: '#fff', border: 0, borderRadius: 8, padding: '9px 13px', fontSize: 12, fontWeight: 600, cursor: selectedWaContacts.length ? 'pointer' : 'not-allowed', opacity: selectedWaContacts.length ? 1 : 0.5 }}>Importar selecionados ({selectedWaContacts.length})</button>
+                    </>}
+                  </div>
                 </div>
               )}
             </div>

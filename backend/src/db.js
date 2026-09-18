@@ -184,6 +184,21 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `).catch(() => {});
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_contacts (
+      id BIGSERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      jid TEXT NOT NULL,
+      lid TEXT,
+      phone TEXT,
+      name TEXT,
+      imported_lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (company_id, jid)
+    );
+    CREATE INDEX IF NOT EXISTS whatsapp_contacts_company_idx ON whatsapp_contacts(company_id, last_seen_at DESC);
+  `).catch(() => {});
   // Campanhas de disparo controlado. Cada destinatário tem uma linha própria
   // para permitir retry, cancelamento e auditoria sem reenviar os já concluídos.
   await pool.query(`
