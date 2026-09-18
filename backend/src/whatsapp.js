@@ -412,6 +412,14 @@ async function connectWhatsApp(companyId) {
       }
     });
 
+    // Baileys emite este evento quando o WhatsApp compartilha a relação entre
+    // o identificador opaco @lid e o número real @s.whatsapp.net.
+    socket.ev.on('chats.phoneNumberShare', async ({ lid, jid }) => {
+      await resolveContact({ id: jid, lid }).catch(e =>
+        console.error('[WA] chats.phoneNumberShare error:', e.message)
+      );
+    });
+
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
       for (const msg of messages) {
         // Capture messages sent from phone to existing leads
@@ -469,8 +477,17 @@ async function connectWhatsApp(companyId) {
         if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us') && !remoteJid.endsWith('@lid')) continue;
         // Remove :deviceId (ex: "5511999:2@s.whatsapp.net" → "5511999")
         const rawPhone = remoteJid.replace(/@[^@]+$/, '').split(':')[0];
+        // Nas mensagens LID, a versão atual do Baileys fornece o número real
+        // diretamente em senderPn/participantPn. Persiste o mapa antes do lookup.
+        const phoneJidFromKey = msg.key.senderPn || msg.key.participantPn || '';
+        const phoneFromKey = phoneJidFromKey.replace(/@[^@]+$/, '').split(':')[0];
+        if (remoteJid.endsWith('@lid') && isRealPhone(phoneFromKey)) {
+          await resolveContact({ id: `${normalizePhone(phoneFromKey)}@s.whatsapp.net`, lid: rawPhone });
+        }
         const resolved = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
-        const phone = resolved || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
+        const phone = resolved
+          || (isRealPhone(phoneFromKey) ? normalizePhone(phoneFromKey) : null)
+          || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
         if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone, '— JID:', remoteJid.split('@')[1]); continue; }
         // Extrair texto ou label de mídia
         const text = msg.message?.conversation
