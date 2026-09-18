@@ -8,6 +8,7 @@ const QRCode = require('qrcode');
 const pool = require('./db');
 const { triggerAutomations } = require('./automationEngine');
 const { fireLeadEvent } = require('./metaPixel');
+const { sanitizeErrorMessage, reconnectDelay } = require('./whatsappConnectionPolicy');
 
 process.on('uncaughtException', (err) => {
   console.error('[WA] uncaughtException:', err.message, err.stack);
@@ -57,6 +58,86 @@ function phoneVariants(phone) {
 }
 
 const connections = new Map();
+const reconnectStates = new Map();
+const authSaveQueues = new Map();
+const LOCK_NAMESPACE = 917204;
+let connectionLockClientPromise = null;
+
+function cancelReconnect(companyId) {
+  const state = reconnectStates.get(companyId);
+  if (state?.timer) clearTimeout(state.timer);
+  reconnectStates.delete(companyId);
+}
+
+function scheduleReconnect(companyId, { delay, attempt, source }) {
+  const previous = reconnectStates.get(companyId);
+  if (previous?.timer) clearTimeout(previous.timer);
+  const state = { attempt, source, timer: null };
+  state.timer = setTimeout(() => {
+    // Um logout manual ou uma tentativa mais nova invalida este callback.
+    if (reconnectStates.get(companyId) !== state) return;
+    state.timer = null;
+    connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message));
+  }, delay);
+  reconnectStates.set(companyId, state);
+}
+
+async function recordConnectionEvent(companyId, event, details = {}) {
+  const message = sanitizeErrorMessage(details.message);
+  try {
+    await pool.query(
+      `INSERT INTO whatsapp_connection_events
+         (company_id, event, status_code, reason, message, reconnect_attempt)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [companyId, event, details.code || null, details.reason || null, message, details.attempt || null]
+    );
+    // Evita crescimento ilimitado: conserva os 100 eventos mais recentes da empresa.
+    await pool.query(
+      `DELETE FROM whatsapp_connection_events
+       WHERE company_id=$1 AND id NOT IN (
+         SELECT id FROM whatsapp_connection_events
+         WHERE company_id=$1 ORDER BY created_at DESC LIMIT 100
+       )`,
+      [companyId]
+    );
+  } catch (e) {
+    console.error('[WA] recordConnectionEvent error:', e.message);
+  }
+}
+
+async function getConnectionLockClient() {
+  if (!connectionLockClientPromise) {
+    connectionLockClientPromise = pool.connect().then((client) => {
+      client.on('error', (e) => {
+        console.error('[WA] advisory lock connection error:', e.message);
+        connectionLockClientPromise = null;
+      });
+      return client;
+    }).catch((e) => {
+      connectionLockClientPromise = null;
+      throw e;
+    });
+  }
+  return connectionLockClientPromise;
+}
+
+async function acquireConnectionLock(companyId) {
+  // Uma única conexão PostgreSQL pode manter as travas de todas as empresas.
+  // Assim não consumimos uma conexão do pool por número de WhatsApp conectado.
+  const client = await getConnectionLockClient();
+  const { rows } = await client.query(
+    'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+    [LOCK_NAMESPACE, companyId]
+  );
+  return rows[0]?.acquired ? client : null;
+}
+
+async function releaseConnectionLock(conn) {
+  if (!conn?.lockClient) return;
+  const client = conn.lockClient;
+  conn.lockClient = null;
+  try { await client.query('SELECT pg_advisory_unlock($1, $2)', [LOCK_NAMESPACE, conn.companyId]); } catch {}
+}
 
 async function loadAuthState(companyId) {
   try {
@@ -76,25 +157,17 @@ async function clearAuthState(companyId) {
 }
 
 async function saveAuthState(companyId, creds, keys) {
-  try {
-    await pool.query(
-      `INSERT INTO whatsapp_sessions (company_id, creds, keys, updated_at) VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (company_id) DO UPDATE SET creds=$2, keys=$3, updated_at=NOW()`,
-      [companyId, JSON.stringify(creds), JSON.stringify(keys)]
-    );
-  } catch (e) { console.error('[WA] saveAuthState error:', e.message); }
-}
-
-async function setStatus(companyId, status) {
-  try {
-    await pool.query(
-      `INSERT INTO whatsapp_sessions (company_id, status, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (company_id) DO UPDATE SET status=$2, updated_at=NOW()`,
-      [companyId, status]
-    );
-  } catch {}
-  const conn = connections.get(companyId);
-  if (conn) conn.status = status;
+  // Baileys pode emitir várias atualizações de chaves simultaneamente. A fila evita
+  // que uma escrita antiga termine por último e sobrescreva o estado mais novo.
+  const previous = authSaveQueues.get(companyId) || Promise.resolve();
+  const next = previous.catch(() => {}).then(() => pool.query(
+    `INSERT INTO whatsapp_sessions (company_id, creds, keys, updated_at) VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (company_id) DO UPDATE SET creds=$2, keys=$3, updated_at=NOW()`,
+    [companyId, JSON.stringify(creds), JSON.stringify(keys)]
+  )).catch((e) => console.error('[WA] saveAuthState error:', e.message));
+  authSaveQueues.set(companyId, next);
+  await next;
+  if (authSaveQueues.get(companyId) === next) authSaveQueues.delete(companyId);
 }
 
 function buildKeysStore(companyId, initialKeys) {
@@ -132,6 +205,18 @@ async function connectWhatsApp(companyId) {
   }
   if (existing?.socket) {
     try { existing.socket.end(undefined); } catch {}
+    await releaseConnectionLock(existing);
+  }
+
+  const lockClient = await acquireConnectionLock(companyId);
+  if (!lockClient) {
+    console.log('[WA] Another server instance owns company connection:', companyId);
+    await recordConnectionEvent(companyId, 'lock_skipped', { message: 'Outra instância já mantém esta sessão' });
+    const attempt = (reconnectStates.get(companyId)?.attempt || 0) + 1;
+    // Essencial em deploy rolling: a instância antiga ainda pode segurar o lock
+    // por alguns segundos enquanto a nova já iniciou.
+    scheduleReconnect(companyId, { delay: 10000, attempt, source: 'lock_busy' });
+    return;
   }
 
   const { creds: savedCreds, keys: savedKeys, lidMap: savedLidMap } = await loadAuthState(companyId);
@@ -149,7 +234,7 @@ async function connectWhatsApp(companyId) {
   }
 
   // Restore persisted LID→phone map from DB (survives Railway restarts)
-  const conn = { socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds, lidToPhone: new Map(Object.entries(savedLidMap)) };
+  const conn = { companyId, lockClient, socket: null, status: 'connecting', qr: null, qrDataUrl: null, creds: freshCreds, lidToPhone: new Map(Object.entries(savedLidMap)) };
   connections.set(companyId, conn);
 
   const logger = pino({ level: 'silent' });
@@ -204,18 +289,35 @@ async function connectWhatsApp(companyId) {
         conn.status = 'open';
         conn.qr = null;
         conn.qrDataUrl = null;
-        await setStatus(companyId, 'open');
+        cancelReconnect(companyId);
+        await pool.query(
+          `INSERT INTO whatsapp_sessions (company_id, status, last_connected_at, updated_at)
+           VALUES ($1, 'open', NOW(), NOW())
+           ON CONFLICT (company_id) DO UPDATE SET status='open', last_connected_at=NOW(), updated_at=NOW()`,
+          [companyId]
+        );
+        await recordConnectionEvent(companyId, 'connected');
         console.log('[WA] Connected successfully!');
       }
 
       if (connection === 'close') {
+        // Ignora o fechamento atrasado de um socket que já foi substituído.
+        if (connections.get(companyId) !== conn) return;
         const boom = new Boom(lastDisconnect?.error);
         const code = boom?.output?.statusCode;
         const reason = Object.entries(DisconnectReason).find(([, v]) => v === code)?.[0] || 'unknown';
-        console.log('[WA] Connection closed, code:', code, 'reason:', reason, 'err:', lastDisconnect?.error?.message);
+        const errorMessage = sanitizeErrorMessage(lastDisconnect?.error?.message);
+        console.log('[WA] Connection closed, code:', code, 'reason:', reason, 'err:', errorMessage);
         conn.status = 'disconnected';
-        await setStatus(companyId, 'disconnected');
+        await pool.query(
+          `UPDATE whatsapp_sessions SET status='disconnected', last_disconnect_code=$2,
+             last_disconnect_reason=$3, last_disconnect_message=$4,
+             last_disconnected_at=NOW(), updated_at=NOW() WHERE company_id=$1`,
+          [companyId, code || null, reason, errorMessage]
+        ).catch(() => {});
+        await recordConnectionEvent(companyId, 'disconnected', { code, reason, message: errorMessage });
         connections.delete(companyId);
+        await releaseConnectionLock(conn);
 
         if (code === DisconnectReason.badSession || code === 500) {
           console.log('[WA] Bad session — clearing auth state, user must reconnect manually');
@@ -226,20 +328,16 @@ async function connectWhatsApp(companyId) {
         if (code === DisconnectReason.restartRequired || code === 515) {
           // Stream restart needed (happens after QR scan) — reconnect immediately with saved creds
           console.log('[WA] Restart required — reconnecting in 1s');
-          setTimeout(() => connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message)), 1000);
+          scheduleReconnect(companyId, { delay: 1000, attempt: 0, source: 'restart_required' });
           return;
         }
 
         if (code !== DisconnectReason.loggedOut && code !== 401) {
-          const attempt = (conn._reconnectAttempt || 0) + 1;
-          const delay = Math.min(8000 * Math.pow(2, attempt - 1), 120000); // 8s, 16s, 32s... max 2min
+          const attempt = (reconnectStates.get(companyId)?.attempt || 0) + 1;
+          const delay = reconnectDelay(attempt);
           console.log('[WA] Will retry in', delay, 'ms (attempt', attempt, ')');
-          setTimeout(() => {
-            const c = connections.get(companyId) || {};
-            c._reconnectAttempt = attempt;
-            connections.set(companyId, c);
-            connectWhatsApp(companyId).catch((e) => console.error('[WA] reconnect error:', e.message));
-          }, delay);
+          await recordConnectionEvent(companyId, 'reconnect_scheduled', { code, reason, attempt, message: `Nova tentativa em ${delay}ms` });
+          scheduleReconnect(companyId, { delay, attempt, source: reason });
         }
       }
     });
@@ -457,17 +555,21 @@ async function connectWhatsApp(companyId) {
 
   } catch (e) {
     console.error('[WA] makeWASocket error:', e.message, e.stack);
-    connections.delete(companyId);
+    if (connections.get(companyId) === conn) connections.delete(companyId);
+    await recordConnectionEvent(companyId, 'connection_error', { message: e.message });
+    await releaseConnectionLock(conn);
   }
 }
 
 async function disconnectWhatsApp(companyId) {
   const conn = connections.get(companyId);
+  cancelReconnect(companyId);
   if (conn?.socket) {
     try { await conn.socket.logout(); } catch {}
     try { conn.socket.end(undefined); } catch {}
   }
   connections.delete(companyId);
+  await releaseConnectionLock(conn);
   try {
     await pool.query(`UPDATE whatsapp_sessions SET creds=NULL, keys=NULL, status='disconnected', updated_at=NOW() WHERE company_id=$1`, [companyId]);
   } catch {}
@@ -484,6 +586,24 @@ async function sendMessage(companyId, phone, text) {
 function getStatus(companyId) {
   const conn = connections.get(companyId);
   return { status: conn?.status || 'disconnected', qrDataUrl: conn?.qrDataUrl || null };
+}
+
+async function getDiagnostics(companyId) {
+  const [session, events] = await Promise.all([
+    pool.query(
+      `SELECT status, last_disconnect_code, last_disconnect_reason, last_disconnect_message,
+              last_connected_at, last_disconnected_at, updated_at
+       FROM whatsapp_sessions WHERE company_id=$1`,
+      [companyId]
+    ),
+    pool.query(
+      `SELECT event, status_code, reason, message, reconnect_attempt, created_at
+       FROM whatsapp_connection_events WHERE company_id=$1
+       ORDER BY created_at DESC LIMIT 20`,
+      [companyId]
+    ),
+  ]);
+  return { session: session.rows[0] || null, events: events.rows };
 }
 
 // Corrige manualmente todos os leads da empresa que têm LID como telefone,
@@ -506,4 +626,4 @@ async function fixLeadPhones(companyId) {
   return fixed;
 }
 
-module.exports = { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, fixLeadPhones };
+module.exports = { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, getDiagnostics, fixLeadPhones };

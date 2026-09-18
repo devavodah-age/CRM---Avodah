@@ -1,5 +1,5 @@
 const express = require('express');
-const { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, fixLeadPhones } = require('../whatsapp');
+const { connectWhatsApp, disconnectWhatsApp, sendMessage, getStatus, getDiagnostics, fixLeadPhones } = require('../whatsapp');
 const pool = require('../db');
 
 const router = express.Router();
@@ -17,6 +17,15 @@ router.post('/connect', async (req, res) => {
 router.get('/status', async (req, res) => {
   const companyId = req.companyId;
   res.json(getStatus(companyId));
+});
+
+// Diagnóstico persistente das últimas conexões e quedas (sem expor credenciais).
+router.get('/diagnostics', async (req, res) => {
+  try {
+    res.json(await getDiagnostics(req.companyId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/disconnect', async (req, res) => {
