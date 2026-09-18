@@ -55,6 +55,11 @@ async function initDb() {
       creds JSONB,
       keys JSONB,
       status TEXT NOT NULL DEFAULT 'disconnected',
+      last_disconnect_code INTEGER,
+      last_disconnect_reason TEXT,
+      last_disconnect_message TEXT,
+      last_connected_at TIMESTAMPTZ,
+      last_disconnected_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
@@ -97,6 +102,26 @@ async function initDb() {
   // Persist LID→phone map across restarts
   await pool.query(`
     ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS lid_map JSONB DEFAULT '{}';
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_disconnect_code INTEGER;
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_disconnect_reason TEXT;
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_disconnect_message TEXT;
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_connected_at TIMESTAMPTZ;
+    ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_disconnected_at TIMESTAMPTZ;
+  `).catch(() => {});
+  // Histórico curto para diagnosticar quedas e ciclos de reconexão do WhatsApp
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_connection_events (
+      id BIGSERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      event TEXT NOT NULL,
+      status_code INTEGER,
+      reason TEXT,
+      message TEXT,
+      reconnect_attempt INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS whatsapp_connection_events_company_created_idx
+      ON whatsapp_connection_events(company_id, created_at DESC);
   `).catch(() => {});
   // Index for company-scoped lead lookups
   await pool.query(`
