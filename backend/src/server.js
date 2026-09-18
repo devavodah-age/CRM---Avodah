@@ -1,6 +1,7 @@
 const app = require('./server-factory');
 const { connectWhatsApp, sendMessage } = require("./whatsapp");
 const { setWhatsAppSender, startJobProcessor } = require("./automationEngine");
+const { startN8nOutboxProcessor } = require('./n8nOutbox');
 const pool = require("./db");
 
 // Wire up WhatsApp sender so automations can send real messages
@@ -8,6 +9,7 @@ setWhatsAppSender(sendMessage);
 
 // Start automation job processor (polls DB every 30s, survives Railway restarts)
 startJobProcessor();
+startN8nOutboxProcessor();
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {

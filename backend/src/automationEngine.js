@@ -1,4 +1,5 @@
 const pool = require('./db');
+const { enqueueN8nEvent } = require('./n8nOutbox');
 
 let sendMessageFn = null;
 let isProcessing = false;
@@ -43,13 +44,32 @@ async function processJobs() {
     client = await pool.connect();
     await client.query('BEGIN');
 
+    // Recupera jobs abandonados por restart/deploy. Depois de três recuperações,
+    // marca como failed para não criar um loop infinito.
+    await client.query(`
+      UPDATE automation_jobs
+      SET status='failed', attempts=attempts + 1, locked_at=NULL,
+          last_error='Job interrompido repetidamente por reinício do servidor'
+      WHERE status='running'
+        AND COALESCE(locked_at, created_at) < NOW() - INTERVAL '5 minutes'
+        AND attempts >= 2
+    `);
+    await client.query(`
+      UPDATE automation_jobs
+      SET status='pending', attempts=attempts + 1, locked_at=NULL, run_at=NOW(),
+          last_error='Job recuperado após reinício do servidor'
+      WHERE status='running'
+        AND COALESCE(locked_at, created_at) < NOW() - INTERVAL '5 minutes'
+        AND attempts < 2
+    `);
+
     const { rows: jobs } = await client.query(`
       SELECT j.id, j.automation_id, j.company_id, j.lead_id, j.next_action_index, j.attempts,
              a.name AS auto_name, a.actions
       FROM automation_jobs j
       JOIN automations a ON a.id = j.automation_id
       WHERE j.status = 'pending' AND j.run_at <= NOW()
-      LIMIT 20
+      LIMIT 5
       FOR UPDATE OF j SKIP LOCKED
     `);
 
@@ -61,7 +81,10 @@ async function processJobs() {
 
     // Mark all as running before releasing the lock
     for (const job of jobs) {
-      await client.query(`UPDATE automation_jobs SET status='running' WHERE id=$1`, [job.id]);
+      await client.query(
+        `UPDATE automation_jobs SET status='running', locked_at=NOW() WHERE id=$1`,
+        [job.id]
+      );
     }
     await client.query('COMMIT');
     client.release();
@@ -89,7 +112,10 @@ async function executeJob(job) {
   // Always fetch fresh lead data (lead may have changed since job was created)
   const { rows } = await pool.query('SELECT * FROM leads WHERE id=$1', [job.lead_id]);
   if (!rows[0]) {
-    await pool.query(`UPDATE automation_jobs SET status='done' WHERE id=$1`, [job.id]);
+    await pool.query(
+      `UPDATE automation_jobs SET status='done', locked_at=NULL, completed_at=NOW() WHERE id=$1`,
+      [job.id]
+    );
     return;
   }
   const lead = rows[0];
@@ -105,7 +131,7 @@ async function executeJob(job) {
         const minutes = Number(action.minutes) || 1;
         const runAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
         await pool.query(
-          `UPDATE automation_jobs SET status='pending', next_action_index=$1, run_at=$2 WHERE id=$3`,
+          `UPDATE automation_jobs SET status='pending', next_action_index=$1, run_at=$2, locked_at=NULL WHERE id=$3`,
           [i + 1, runAt, job.id]
         );
         console.log(`[AutoEngine] Job ${job.id} pausado — retoma em ${minutes}min (${runAt})`);
@@ -123,24 +149,43 @@ async function executeJob(job) {
             "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
             [lead.id, `⚠️ Automação "${job.auto_name}": lead sem telefone cadastrado`]
           );
+          const error = new Error('Lead sem telefone cadastrado');
+          error.retryable = false;
+          throw error;
         } else {
+          let result;
           try {
-            if (sendMessageFn) await sendMessageFn(job.company_id, lead.phone, text);
-            await pool.query(
-              "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'me',$2)",
-              [lead.id, text]
-            );
+            if (!sendMessageFn) throw new Error('Provedor de WhatsApp indisponível');
+            result = await sendMessageFn(job.company_id, lead.phone, text);
           } catch (e) {
             await pool.query(
               "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
-              [lead.id, `⚠️ WhatsApp offline — mensagem não enviada: "${text}"`]
+              [lead.id, `⚠️ WhatsApp indisponível — envio será tentado novamente: "${text}"`]
             );
+            throw e;
           }
+          // O envio externo já aconteceu. Salva primeiro o checkpoint para que uma
+          // falha posterior no banco não provoque um segundo envio no retry.
+          await pool.query(
+            `UPDATE automation_jobs SET next_action_index=$1, locked_at=NOW() WHERE id=$2`,
+            [i + 1, job.id]
+          );
+          const waMessageId = result?.key?.id || null;
+          await pool.query(
+            `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
+             VALUES ($1,'me',$2,$3)
+             ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL
+             DO UPDATE SET text=EXCLUDED.text`,
+            [lead.id, text, waMessageId]
+          );
         }
 
       } else if (action.type === 'move_stage') {
         if (action.stage) {
           await pool.query('UPDATE leads SET stage=$1 WHERE id=$2', [action.stage, lead.id]);
+          await enqueueN8nEvent(job.company_id, 'stage_changed', {
+            leadId: lead.id, previousStage: lead.stage, stage: action.stage, source: 'automation',
+          });
           lead.stage = action.stage;
         }
 
@@ -152,6 +197,11 @@ async function executeJob(job) {
       }
 
       i++;
+      // Checkpoint após cada ação: um restart retoma da próxima ação concluída.
+      await pool.query(
+        `UPDATE automation_jobs SET next_action_index=$1, locked_at=NOW() WHERE id=$2`,
+        [i, job.id]
+      );
     }
 
     // All actions completed
@@ -159,21 +209,34 @@ async function executeJob(job) {
       "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
       [lead.id, `🤖 Automação "${job.auto_name}" executada com sucesso`]
     );
-    await pool.query(`UPDATE automation_jobs SET status='done' WHERE id=$1`, [job.id]);
+    await pool.query(
+      `UPDATE automation_jobs
+       SET status='done', locked_at=NULL, completed_at=NOW(), last_error=NULL
+       WHERE id=$1`,
+      [job.id]
+    );
     console.log(`[AutoEngine] Job ${job.id} concluído — lead ${lead.id}`);
 
   } catch (e) {
     console.error(`[AutoEngine] Job ${job.id} falhou (tentativa ${(job.attempts || 0) + 1}):`, e.message);
     const attempts = (job.attempts || 0) + 1;
-    if (attempts < 3) {
+    const errorMessage = String(e.message || e).slice(0, 500);
+    if (e.retryable !== false && attempts < 3) {
       // Retry em 5 minutos
       await pool.query(
-        `UPDATE automation_jobs SET status='pending', attempts=$1, run_at=NOW() + INTERVAL '5 minutes' WHERE id=$2`,
-        [attempts, job.id]
+        `UPDATE automation_jobs
+         SET status='pending', attempts=$1, run_at=NOW() + INTERVAL '5 minutes',
+             locked_at=NULL, last_error=$3
+         WHERE id=$2`,
+        [attempts, job.id, errorMessage]
       );
       console.log(`[AutoEngine] Job ${job.id} reagendado para daqui 5min (tentativa ${attempts}/3)`);
     } else {
-      await pool.query(`UPDATE automation_jobs SET status='failed', attempts=$1 WHERE id=$2`, [attempts, job.id]);
+      await pool.query(
+        `UPDATE automation_jobs
+         SET status='failed', attempts=$1, locked_at=NULL, last_error=$3 WHERE id=$2`,
+        [attempts, job.id, errorMessage]
+      );
       console.log(`[AutoEngine] Job ${job.id} falhou definitivamente após 3 tentativas`);
     }
   }
