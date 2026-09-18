@@ -1,7 +1,13 @@
 // Polyfill Web Crypto API for Node.js < 18
 if (!globalThis.crypto) { const { webcrypto } = require("crypto"); globalThis.crypto = webcrypto; }
 
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, initAuthCreds } = require('@whiskeysockets/baileys');
+const {
+  default: makeWASocket,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  initAuthCreds,
+} = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const QRCode = require('qrcode');
@@ -10,6 +16,7 @@ const { triggerAutomations } = require('./automationEngine');
 const { fireLeadEvent } = require('./metaPixel');
 const { sanitizeErrorMessage, reconnectDelay } = require('./whatsappConnectionPolicy');
 const { enqueueN8nEvent } = require('./n8nOutbox');
+const { extractMessageText } = require('./whatsappMessage');
 
 process.on('uncaughtException', (err) => {
   console.error('[WA] uncaughtException:', err.message, err.stack);
@@ -434,7 +441,7 @@ async function connectWhatsApp(companyId) {
             const resolvedFromMe = conn.lidToPhone.get(rawPhone) || conn.lidToPhone.get(rawPhone.replace(/\D/g, ''));
             // @lid JID DEVE ser resolvido; @s.whatsapp.net aceita telefone real direto
             const phone = resolvedFromMe || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
-            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+            const text = extractMessageText(msg.message);
             if (!text) continue;
             const msgId = msg.key.id;
             // DB-level dedup: evita duplicar mensagens no restart do servidor
@@ -491,15 +498,8 @@ async function connectWhatsApp(companyId) {
           || (isRealPhone(phoneFromKey) ? normalizePhone(phoneFromKey) : null)
           || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
         if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone, '— JID:', remoteJid.split('@')[1]); continue; }
-        // Extrair texto ou label de mídia
-        const text = msg.message?.conversation
-          || msg.message?.extendedTextMessage?.text
-          || (msg.message?.imageMessage ? '[Imagem]' : null)
-          || (msg.message?.audioMessage ? '[Áudio]' : null)
-          || (msg.message?.videoMessage ? '[Vídeo]' : null)
-          || (msg.message?.documentMessage ? `[Documento: ${msg.message.documentMessage.fileName || 'arquivo'}]` : null)
-          || (msg.message?.stickerMessage ? '[Sticker]' : null)
-          || '';
+        // Normaliza wrappers (efêmera, view-once, editada) antes de extrair.
+        const text = extractMessageText(msg.message);
         if (!text) continue;
         try {
           // DB-level dedup: skip if this wa_msg_id was already saved
