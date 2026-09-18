@@ -490,6 +490,15 @@ async function connectWhatsApp(companyId) {
         // diretamente em senderPn/participantPn. Persiste o mapa antes do lookup.
         const phoneJidFromKey = msg.key.senderPn || msg.key.participantPn || '';
         const phoneFromKey = phoneJidFromKey.replace(/@[^@]+$/, '').split(':')[0];
+        const lidJidFromKey = msg.key.senderLid || msg.key.participantLid || '';
+        const lidFromKey = lidJidFromKey.replace(/@[^@]+$/, '').split(':')[0];
+
+        // A primeira mensagem costuma chegar pelo telefone e informar o LID em
+        // senderLid. Salvar esse caminho inverso é o que permite reconhecer as
+        // mensagens seguintes, que podem chegar apenas como @lid e sem senderPn.
+        if (!remoteJid.endsWith('@lid') && isRealPhone(rawPhone) && lidFromKey) {
+          await resolveContact({ id: `${normalizePhone(rawPhone)}@s.whatsapp.net`, lid: lidFromKey });
+        }
         if (remoteJid.endsWith('@lid') && isRealPhone(phoneFromKey)) {
           await resolveContact({ id: `${normalizePhone(phoneFromKey)}@s.whatsapp.net`, lid: rawPhone });
         }
