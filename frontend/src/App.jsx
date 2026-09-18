@@ -10,6 +10,7 @@ import AdminPanel from "./AdminPanel";
 import Sidebar from "./components/Sidebar";
 import Pipeline from "./components/Pipeline";
 import ChatPanel from "./components/ChatPanel";
+import Broadcasts from "./Broadcasts";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -459,6 +460,7 @@ export default function PulsoCRM() {
     contatos: ["Contatos", "Todos os leads e clientes em um só lugar"],
     automacoes: ["Automações", "Regras que disparam ações sozinhas"],
     conversas: ["Conversas", "Acompanhe as conversas com seus leads"],
+    disparos: ["Disparos", "Envie mensagens individuais para vários contatos"],
     whatsapp: ["WhatsApp", "Conecte e gerencie sua conta WhatsApp"],
     configuracoes: ["Configurações", "Pixel, API de Conversões e outras integrações"],
     clientes: ["Clientes", "Gerencie todas as empresas da plataforma"],
@@ -807,6 +809,10 @@ export default function PulsoCRM() {
                 </div>
               )}
             </div>
+          )}
+
+          {view === "disparos" && (
+            <Broadcasts leads={leads} apiFetch={apiFetch} addToast={addToast} />
           )}
 
           {/* WhatsApp */}

@@ -2,6 +2,7 @@ const app = require('./server-factory');
 const { connectWhatsApp, sendMessage } = require("./whatsapp");
 const { setWhatsAppSender, startJobProcessor } = require("./automationEngine");
 const { startN8nOutboxProcessor } = require('./n8nOutbox');
+const { startBroadcastProcessor } = require('./broadcasts');
 const pool = require("./db");
 
 const PORT = process.env.PORT || 3001;
@@ -12,6 +13,7 @@ async function startServer() {
   setWhatsAppSender(sendMessage);
   startJobProcessor();
   startN8nOutboxProcessor();
+  startBroadcastProcessor();
 
   app.listen(PORT, async () => {
     console.log(`Pulso CRM backend rodando em http://localhost:${PORT}`);
