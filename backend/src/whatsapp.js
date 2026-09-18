@@ -359,6 +359,106 @@ async function connectWhatsApp(companyId) {
       return null;
     }
 
+    async function persistIncomingMessage({ phone, text, msgId, pushName }) {
+      const variants = phoneVariants(phone);
+      if (!variants.length) throw new Error('Telefone inválido na mensagem recebida');
+      const placeholders = variants
+        .map((_, i) => `REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $${i + 2}`)
+        .join(' OR ');
+      const lockKey = BigInt(companyId) * BigInt(1000000)
+        + BigInt(parseInt(normalizePhone(phone)?.slice(-6) || '0', 10));
+      const client = await pool.connect();
+      let leadId;
+      let newLeadForEvents = null;
+      let inserted = false;
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey.toString()]);
+
+        const duplicate = msgId
+          ? await client.query('SELECT lead_id FROM messages WHERE wa_msg_id=$1 LIMIT 1', [msgId])
+          : { rows: [] };
+        if (duplicate.rows.length) {
+          await client.query('COMMIT');
+          return { inserted: false, leadId: duplicate.rows[0].lead_id };
+        }
+
+        const leadResult = await client.query(
+          `SELECT id, name FROM leads WHERE company_id=$1 AND (${placeholders}) LIMIT 1`,
+          [companyId, ...variants]
+        );
+        if (!leadResult.rows.length) {
+          const name = pushName || phone;
+          const newLead = await client.query(
+            "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id, name",
+            [companyId, name, phone]
+          );
+          leadId = newLead.rows[0].id;
+          newLeadForEvents = { id: leadId, name: newLead.rows[0].name, phone };
+          await client.query(
+            "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
+            [leadId, 'Lead criado automaticamente via WhatsApp']
+          );
+        } else {
+          leadId = leadResult.rows[0].id;
+        }
+
+        const saved = await client.query(
+          `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
+           VALUES ($1,'lead',$2,$3)
+           ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING
+           RETURNING id`,
+          [leadId, text, msgId || null]
+        );
+        inserted = saved.rowCount > 0;
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      if (!inserted) return { inserted: false, leadId };
+      if (newLeadForEvents) {
+        console.log('[WA] Auto-created lead for', phone);
+        fireLeadEvent(companyId, newLeadForEvents).catch(console.error);
+        triggerAutomations(companyId, 'new_lead', { lead: newLeadForEvents }).catch(console.error);
+        enqueueN8nEvent(companyId, 'new_lead', {
+          leadId, name: newLeadForEvents.name, phone, source: 'whatsapp',
+        }).catch(console.error);
+      }
+      enqueueN8nEvent(companyId, 'message_received', {
+        leadId, phone, message: text,
+      }).catch(console.error);
+      triggerAutomations(companyId, 'message_received', {
+        lead: { id: leadId, phone }, message: text,
+      }).catch(console.error);
+      return { inserted: true, leadId };
+    }
+
+    async function replayPendingMessages(lid, phone) {
+      const lidDigits = String(lid).replace(/\D/g, '');
+      const { rows } = await pool.query(
+        `SELECT id, wa_msg_id, push_name, text
+         FROM whatsapp_pending_messages
+         WHERE company_id=$1 AND lid=$2 ORDER BY id`,
+        [companyId, lidDigits]
+      );
+      for (const pending of rows) {
+        try {
+          await persistIncomingMessage({
+            phone, text: pending.text, msgId: pending.wa_msg_id, pushName: pending.push_name,
+          });
+          await pool.query('DELETE FROM whatsapp_pending_messages WHERE id=$1', [pending.id]);
+          if (pending.wa_msg_id) processedMsgIds.add(pending.wa_msg_id);
+        } catch (error) {
+          console.error('[WA] pending message replay error:', error.message);
+          break;
+        }
+      }
+    }
+
     // Processa um contato do evento contacts.upsert/update:
     // mapeia LID -> telefone real, persiste no DB, e corrige leads com LID errado
     async function resolveContact(contact) {
@@ -395,6 +495,8 @@ async function connectWhatsApp(companyId) {
           [companyId, JSON.stringify({ [lid]: realPhone, [lidDigits]: realPhone })]
         );
       } catch (e) { console.error('[WA] resolveContact persist error:', e.message); }
+
+      await replayPendingMessages(lidDigits, realPhone);
 
       // Corrige leads que têm o LID como telefone (criados antes do fix)
       try {
@@ -450,7 +552,6 @@ async function connectWhatsApp(companyId) {
               if (dup.rows.length) continue;
             }
             if (msgId && processedMsgIds.has(msgId)) continue;
-            if (msgId) processedMsgIds.add(msgId);
             const variants = phoneVariants(phone);
             if (!variants.length) continue;
             const placeholders = variants.map((_, i) => `REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $${i + 2}`).join(' OR ');
@@ -459,12 +560,14 @@ async function connectWhatsApp(companyId) {
               [companyId, ...variants]
             );
             if (leadResult.rows.length) {
-              await pool.query(
+              const saved = await pool.query(
                 `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
                  VALUES ($1,'me',$2,$3)
-                 ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING`,
+                 ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING
+                 RETURNING id`,
                 [leadResult.rows[0].id, text, msgId || null]
               );
+              if (saved.rowCount > 0 && msgId) processedMsgIds.add(msgId);
             }
           } catch (e) { console.error('[WA] fromMe handler error:', e.message); }
           continue;
@@ -480,7 +583,6 @@ async function connectWhatsApp(companyId) {
         const msgId = msg.key.id;
         // In-memory dedup for same session
         if (msgId && processedMsgIds.has(msgId)) continue;
-        if (msgId) processedMsgIds.add(msgId);
         const remoteJid = msg.key.remoteJid || '';
         // Aceita contatos individuais: @s.whatsapp.net, @c.us e @lid (LID-based)
         if (!remoteJid.endsWith('@s.whatsapp.net') && !remoteJid.endsWith('@c.us') && !remoteJid.endsWith('@lid')) continue;
@@ -506,76 +608,40 @@ async function connectWhatsApp(companyId) {
         const phone = resolved
           || (isRealPhone(phoneFromKey) ? normalizePhone(phoneFromKey) : null)
           || (remoteJid.endsWith('@lid') ? null : (isRealPhone(rawPhone) ? rawPhone : null));
-        if (!phone) { console.log('[WA] LID não resolvido, aguardando contacts.upsert:', rawPhone, '— JID:', remoteJid.split('@')[1]); continue; }
         // Normaliza wrappers (efêmera, view-once, editada) antes de extrair.
         const text = extractMessageText(msg.message);
         if (!text) continue;
-        try {
-          // DB-level dedup: skip if this wa_msg_id was already saved
-          if (msgId) {
-            const dup = await pool.query('SELECT id FROM messages WHERE wa_msg_id=$1 LIMIT 1', [msgId]);
-            if (dup.rows.length) continue;
-          }
-          const variants = phoneVariants(phone);
-          if (!variants.length) continue;
-          const placeholders = variants.map((_, i) => `REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $${i + 2}`).join(' OR ');
-          let leadId; let newLeadForEvents = null;
-          // Advisory lock por (company_id, phone) para evitar criação de leads duplicados
-          const lockKey = BigInt(companyId) * BigInt(1000000) + BigInt(parseInt(normalizePhone(phone)?.slice(-6) || '0', 10));
-          const client = await pool.connect();
-          try {
-            await client.query('BEGIN');
-            await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey.toString()]);
-
-            let leadResult = await client.query(
-              `SELECT id, name FROM leads WHERE company_id=$1 AND (${placeholders}) LIMIT 1`,
-              [companyId, ...variants]
+        if (!phone) {
+          if (msgId && remoteJid.endsWith('@lid')) {
+            await pool.query(
+              `INSERT INTO whatsapp_pending_messages
+                 (company_id, wa_msg_id, lid, push_name, text)
+               VALUES ($1,$2,$3,$4,$5)
+               ON CONFLICT (company_id, wa_msg_id) DO NOTHING`,
+              [companyId, msgId, rawPhone.replace(/\D/g, ''), msg.pushName || null, text]
             );
-
-            if (!leadResult.rows.length) {
-              const name = msg.pushName || phone;
-              const newLead = await client.query(
-                "INSERT INTO leads (company_id, name, phone, stage) VALUES ($1,$2,$3,'novo') RETURNING id, name",
-                [companyId, name, phone]
-              );
-              leadId = newLead.rows[0].id;
-              newLeadForEvents = { id: leadId, name: newLead.rows[0].name, phone };
-              await client.query(
-                "INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system',$2)",
-                [leadId, 'Lead criado automaticamente via WhatsApp']
-              );
-              console.log('[WA] Auto-created lead for', phone);
-            } else {
-              leadId = leadResult.rows[0].id;
-            }
-            await client.query('COMMIT');
-          } catch (e) {
-            await client.query('ROLLBACK').catch(() => {});
-            throw e;
-          } finally {
-            client.release();
+            processedMsgIds.add(msgId);
           }
-          if (newLeadForEvents) {
-            fireLeadEvent(companyId, newLeadForEvents).catch(console.error);
-            triggerAutomations(companyId, 'new_lead', { lead: newLeadForEvents }).catch(console.error);
-            enqueueN8nEvent(companyId, 'new_lead', {
-              leadId, name: newLeadForEvents.name, phone, source: 'whatsapp',
-            }).catch(console.error);
-          }
-          await pool.query(
-            `INSERT INTO messages (lead_id, from_type, text, wa_msg_id)
-             VALUES ($1,'lead',$2,$3)
-             ON CONFLICT (wa_msg_id) WHERE wa_msg_id IS NOT NULL DO NOTHING`,
-            [leadId, text, msgId || null]
-          );
-          enqueueN8nEvent(companyId, 'message_received', {
-            leadId, phone, message: text,
-          }).catch(console.error);
-          // Trigger message_received automations
-          triggerAutomations(companyId, 'message_received', { lead: { id: leadId, phone }, message: text }).catch(console.error);
+          console.log('[WA] LID não resolvido; mensagem guardada até receber o telefone:', rawPhone);
+          continue;
+        }
+        try {
+          await persistIncomingMessage({ phone, text, msgId, pushName: msg.pushName });
+          if (msgId) processedMsgIds.add(msgId);
         } catch (e) { console.error('[WA] message handler error:', e.message); }
       }
     });
+
+    // Se o servidor reiniciou depois de guardar uma mensagem pendente, o mapa
+    // LID→telefone já pode ter vindo da sessão persistida e nenhum novo evento
+    // de contato será emitido. Reprocessa essas filas também na conexão.
+    const replayedLids = new Set();
+    for (const [lid, phone] of conn.lidToPhone) {
+      const lidDigits = String(lid).replace(/\D/g, '');
+      if (!lidDigits || replayedLids.has(lidDigits)) continue;
+      replayedLids.add(lidDigits);
+      await replayPendingMessages(lidDigits, phone);
+    }
 
   } catch (e) {
     console.error('[WA] makeWASocket error:', e.message, e.stack);

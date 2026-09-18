@@ -76,7 +76,23 @@ async function initDb() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS wa_msg_id TEXT;
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_nodes JSONB DEFAULT '[]';
     ALTER TABLE automations ADD COLUMN IF NOT EXISTS flow_edges JSONB DEFAULT '[]';
-  `).catch(() => {});
+  `);
+  // Mensagens recebidas por um JID @lid podem chegar antes do evento que revela
+  // o telefone real. Mantemos essas mensagens até o mapeamento ser conhecido.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_pending_messages (
+      id BIGSERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      wa_msg_id TEXT NOT NULL,
+      lid TEXT NOT NULL,
+      push_name TEXT,
+      text TEXT NOT NULL,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (company_id, wa_msg_id)
+    );
+    CREATE INDEX IF NOT EXISTS whatsapp_pending_messages_lid_idx
+      ON whatsapp_pending_messages(company_id, lid);
+  `);
   // Unique index for wa_msg_id deduplication
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS messages_wa_msg_id_idx ON messages(wa_msg_id) WHERE wa_msg_id IS NOT NULL;
@@ -177,8 +193,14 @@ async function initDb() {
 
 // Em testes sem banco configurado, não inicia uma conexão implícita com localhost.
 // As suítes de integração usam TEST_DATABASE_URL quando disponível.
-if (process.env.NODE_ENV !== 'test' || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL) {
-  initDb().catch(console.error);
-}
+const dbReady = (process.env.NODE_ENV !== 'test' || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL)
+  ? initDb()
+  : Promise.resolve();
+
+// Evita rejeição não tratada durante imports, mas preserva a rejeição para que
+// server.js não suba os workers antes das migrations terminarem.
+dbReady.catch((error) => console.error('Falha ao inicializar banco:', error));
 
 module.exports = pool;
+module.exports.initDb = initDb;
+module.exports.dbReady = dbReady;

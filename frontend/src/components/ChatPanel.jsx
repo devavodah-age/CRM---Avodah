@@ -112,12 +112,20 @@ export default function ChatPanel({
   const [chatInput, setChatInput] = useState("");
   const [editingLeadField, setEditingLeadField] = useState(null);
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
+  const [sending, setSending] = useState(false);
 
   async function handleSend() {
     if (!chatInput.trim()) return;
     const text = chatInput.trim();
     setChatInput("");
-    await onSend(text);
+    setSending(true);
+    try {
+      await onSend(text);
+    } catch {
+      setChatInput(text);
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -563,13 +571,14 @@ export default function ChatPanel({
           <input
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => e.key === "Enter" && !sending && handleSend()}
             placeholder="Escreva uma mensagem..."
             className="pulso-input"
             style={{ flex: 1 }}
           />
           <button
             onClick={handleSend}
+            disabled={sending}
             style={{
               width: 36,
               height: 36,

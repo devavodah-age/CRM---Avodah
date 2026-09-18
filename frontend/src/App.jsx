@@ -210,6 +210,23 @@ export default function PulsoCRM() {
     return unwrapApiPayload(data);
   }
 
+  async function sendConversationMessage() {
+    if (!chatInput.trim() || !convLeadId) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const message = await apiFetch(`/leads/${convLeadId}/messages`, {
+        method: 'POST', body: JSON.stringify({ text }),
+      });
+      setLeads(prev => prev.map(lead => lead.id === convLeadId
+        ? { ...lead, messages: [...(lead.messages || []), message] }
+        : lead));
+    } catch (error) {
+      setChatInput(text);
+      addToast(`Não consegui enviar a mensagem: ${error.message}`);
+    }
+  }
+
   async function loadData() {
     setLoadingData(true);
     try {
@@ -673,21 +690,9 @@ export default function PulsoCRM() {
                     )}
                     <div style={{ padding: 12, borderTop: `1px solid ${BORDER}`, background: SURFACE, display: 'flex', gap: 8 }}>
                       <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          if (!chatInput.trim() || !convLeadId) return;
-                          const text = chatInput.trim(); setChatInput('');
-                          apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
-                            .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
-                            .catch(err => addToast(`Erro: ${err.message}`));
-                        }
+                        if (e.key === 'Enter') sendConversationMessage();
                       }} placeholder="Escreva uma mensagem..." className="pulso-input" style={{ flex: 1 }} />
-                      <button onClick={() => {
-                        if (!chatInput.trim() || !convLeadId) return;
-                        const text = chatInput.trim(); setChatInput('');
-                        apiFetch(`/leads/${convLeadId}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
-                          .then(msg => setLeads(prev => prev.map(l => l.id === convLeadId ? { ...l, messages: [...(l.messages || []), msg] } : l)))
-                          .catch(err => addToast(`Erro: ${err.message}`));
-                      }} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                      <button onClick={sendConversationMessage} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                         <Send size={14} />
                       </button>
                     </div>
@@ -924,7 +929,10 @@ export default function PulsoCRM() {
             try {
               const message = await apiFetch(`/leads/${targetId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
               setLeads((prev) => prev.map((l) => (l.id === targetId ? { ...l, messages: [...l.messages, message] } : l)));
-            } catch (err) { addToast(`Não consegui enviar a mensagem: ${err.message}`); }
+            } catch (err) {
+              addToast(`Não consegui enviar a mensagem: ${err.message}`);
+              throw err;
+            }
           }}
           onUpdate={(fields) => updateLead(selectedLead.id, fields)}
           onDelete={() => deleteLead(selectedLead.id)}

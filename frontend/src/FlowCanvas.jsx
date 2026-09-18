@@ -368,10 +368,19 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
 
   // ── Save logic ─────────────────────────────────────────────────────────────
   function handleSave() {
-    const triggerNode = nodes.find(n => n.type && n.type.startsWith('trigger_'));
+    const triggerNodes = nodes.filter(n => n.type && n.type.startsWith('trigger_'));
+    const triggerNode = triggerNodes[0];
 
     if (!triggerNode) {
       alert('Adicione um gatilho ao fluxo antes de salvar.');
+      return;
+    }
+    if (triggerNodes.length > 1) {
+      alert('Use apenas um gatilho por automação. Remova os gatilhos extras.');
+      return;
+    }
+    if (!name.trim()) {
+      alert('Informe um nome para a automação.');
       return;
     }
 
@@ -402,6 +411,26 @@ export default function FlowCanvas({ name, onNameChange, initialNodes = [], init
         return null;
       })
       .filter(Boolean);
+
+    if (actions.length === 0) {
+      alert('Conecte pelo menos uma ação ao gatilho.');
+      return;
+    }
+    const disconnectedActions = nodes.filter(n => !n.type.startsWith('trigger_') && !visited.has(n.id));
+    if (disconnectedActions.length > 0) {
+      alert('Existem ações desconectadas. Conecte ou remova todos os blocos antes de salvar.');
+      return;
+    }
+    const invalidAction = actions.find(action =>
+      (action.type === 'send_whatsapp' && !action.message.trim())
+      || (action.type === 'wait' && Number(action.minutes) < 1)
+      || (action.type === 'move_stage' && !action.stage)
+      || (action.type === 'add_note' && !action.note.trim())
+    );
+    if (invalidAction) {
+      alert('Preencha todos os campos das ações antes de salvar.');
+      return;
+    }
 
     // Strip callbacks from node data before saving
     const cleanNodes = nodes.map(n => ({
