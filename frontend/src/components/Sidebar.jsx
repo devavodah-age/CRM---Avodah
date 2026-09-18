@@ -1,6 +1,6 @@
 import {
   BarChart2, LayoutGrid, Users, Zap, MessageSquare, Smartphone,
-  Settings, Building2, LogOut,
+  Settings, Building2, LogOut, Send,
 } from "lucide-react";
 import { PRIMARY, TEXT, MUTED, SUBTLE, BORDER } from "../tokens";
 
@@ -10,6 +10,7 @@ const NAV = [
   { id: "contatos",      label: "Contatos",       icon: Users },
   { id: "automacoes",    label: "Automações",     icon: Zap },
   { id: "conversas",     label: "Conversas",      icon: MessageSquare },
+  { id: "disparos",      label: "Disparos",       icon: Send },
   { id: "whatsapp",      label: "WhatsApp",       icon: Smartphone },
   { id: "configuracoes", label: "Configurações",  icon: Settings },
 ];

@@ -184,6 +184,42 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `).catch(() => {});
+  // Campanhas de disparo controlado. Cada destinatário tem uma linha própria
+  // para permitir retry, cancelamento e auditoria sem reenviar os já concluídos.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft','queued','running','paused','completed','cancelled')),
+      interval_seconds INTEGER NOT NULL DEFAULT 5 CHECK (interval_seconds >= 3),
+      total_count INTEGER NOT NULL DEFAULT 0,
+      sent_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      last_error TEXT
+    );
+    CREATE TABLE IF NOT EXISTS broadcast_recipients (
+      id BIGSERIAL PRIMARY KEY,
+      broadcast_id INTEGER NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+      lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      rendered_message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','sending','sent','failed')),
+      wa_msg_id TEXT,
+      error TEXT,
+      sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (broadcast_id, lead_id)
+    );
+    CREATE INDEX IF NOT EXISTS broadcast_recipients_pending_idx
+      ON broadcast_recipients(broadcast_id, status, id);
+  `).catch(() => {});
   // Role de usuário: 'admin' gerencia todas as empresas, 'user' só vê a própria
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';

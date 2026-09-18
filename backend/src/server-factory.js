@@ -9,6 +9,7 @@ const automationsRoutes = require("./routes/automations");
 const whatsappRoutes = require("./routes/whatsapp");
 const settingsRoutes = require("./routes/settings");
 const templatesRoutes = require("./routes/templates");
+const broadcastsRoutes = require("./routes/broadcasts");
 const companiesRoutes = require("./routes/companies");
 
 const app = express();
@@ -53,6 +54,7 @@ app.use("/api/automations", apiLimiter, requireAuth, automationsRoutes);
 app.use("/api/whatsapp",    apiLimiter, requireAuth, whatsappRoutes);
 app.use("/api/settings",    apiLimiter, requireAuth, settingsRoutes);
 app.use("/api/templates",   apiLimiter, requireAuth, templatesRoutes);
+app.use("/api/broadcasts",  apiLimiter, requireAuth, broadcastsRoutes);
 app.use("/api/companies",   apiLimiter, requireAuth, companiesRoutes);
 
 module.exports = app;
