@@ -19,7 +19,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('CORS bloqueado: origem não permitida'));
   },
   credentials: true,

@@ -175,16 +175,18 @@ router.post('/:id/messages', async (req, res) => {
     if (!lead) return fail(res, 'Lead não encontrado.', 404);
     if (!text || !text.trim()) return fail(res, 'Mensagem vazia.', 400);
 
-    let waMessageId = null;
-    // Tenta enviar pelo WhatsApp se conectado e lead tem telefone
-    if (lead.phone && getStatus(req.companyId).status === 'open') {
-      try {
-        const waResult = await sendMessage(req.companyId, lead.phone, text.trim());
-        waMessageId = waResult?.key?.id || null;
-      } catch (e) {
-        // WhatsApp offline — salva normalmente, sem wa_msg_id
-      }
+    if (!lead.phone) return fail(res, 'Este lead não possui telefone cadastrado.', 400);
+    if (getStatus(req.companyId).status !== 'open') {
+      return fail(res, 'WhatsApp desconectado. Reconecte antes de enviar.', 503);
     }
+    let waResult;
+    try {
+      waResult = await sendMessage(req.companyId, lead.phone, text.trim());
+    } catch (error) {
+      console.error('[Leads] Falha ao enviar WhatsApp:', error.message);
+      return fail(res, 'Não foi possível enviar pelo WhatsApp. Tente novamente.', 502);
+    }
+    const waMessageId = waResult?.key?.id || null;
 
     // Salvar com wa_msg_id previne duplicação quando fromMe handler receber de volta.
     // ON CONFLICT precisa replicar o WHERE do índice parcial (wa_msg_id IS NOT NULL)
