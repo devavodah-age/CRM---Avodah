@@ -13,6 +13,13 @@ import ChatPanel from "./components/ChatPanel";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
+function unwrapApiPayload(payload) {
+  if (payload?.success === true && Object.prototype.hasOwnProperty.call(payload, 'data')) {
+    return payload.data;
+  }
+  return payload;
+}
+
 // Design tokens
 const BG = "#08090C";
 const SURFACE = "#0F1117";
@@ -197,14 +204,17 @@ export default function PulsoCRM() {
     let data = {};
     try { data = await res.json(); } catch (e) { data = {}; }
     if (!res.ok) throw new Error(data.error || "Erro ao falar com o servidor");
-    return data;
+    // As rotas mais novas usam o envelope { success, data, error }, enquanto
+    // rotas legadas ainda retornam o conteúdo diretamente. Normaliza ambos os
+    // formatos para que os componentes nunca recebam o envelope por engano.
+    return unwrapApiPayload(data);
   }
 
   async function loadData() {
     setLoadingData(true);
     try {
       const [leadsResp, automationsData] = await Promise.all([apiFetch("/leads"), apiFetch("/automations")]);
-      setLeads(leadsResp?.data?.leads ?? leadsResp?.leads ?? (Array.isArray(leadsResp) ? leadsResp : []));
+      setLeads(leadsResp?.leads ?? (Array.isArray(leadsResp) ? leadsResp : []));
       setAutomations(automationsData);
     } catch (err) {
       addToast(`Não consegui carregar os dados: ${err.message}`);
@@ -248,7 +258,10 @@ export default function PulsoCRM() {
     if (!token || !activeChatLeadId) return;
     const pollMessages = () => {
       fetch(`${API_URL}/leads/${activeChatLeadId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(msgs => { if (Array.isArray(msgs)) setLeads(prev => prev.map(l => l.id === activeChatLeadId ? { ...l, messages: msgs } : l)); }).catch(() => {});
+        .then(r => r.json()).then(payload => {
+          const msgs = unwrapApiPayload(payload);
+          if (Array.isArray(msgs)) setLeads(prev => prev.map(l => l.id === activeChatLeadId ? { ...l, messages: msgs } : l));
+        }).catch(() => {});
     };
     pollMessages();
     const id = setInterval(pollMessages, 5000);
