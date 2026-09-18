@@ -359,6 +359,26 @@ async function connectWhatsApp(companyId) {
       return null;
     }
 
+    async function persistWhatsAppContact(contact) {
+      if (!contact?.id) return;
+      const jid = String(contact.id);
+      const lid = extractLid(contact.lid) || (jid.endsWith('@lid') ? jid.replace('@lid', '') : null);
+      const rawPhone = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us')
+        ? jid.replace(/@[^@]+$/, '').split(':')[0] : normalizePhone(contact.phone);
+      const phone = isRealPhone(rawPhone) ? normalizePhone(rawPhone) : null;
+      const name = contact.name || contact.notify || contact.pushName || null;
+      await pool.query(
+        `INSERT INTO whatsapp_contacts (company_id,jid,lid,phone,name,last_seen_at)
+         VALUES ($1,$2,$3,$4,$5,NOW())
+         ON CONFLICT (company_id,jid) DO UPDATE SET
+           lid=COALESCE(EXCLUDED.lid, whatsapp_contacts.lid),
+           phone=COALESCE(EXCLUDED.phone, whatsapp_contacts.phone),
+           name=COALESCE(EXCLUDED.name, whatsapp_contacts.name),
+           last_seen_at=NOW()`,
+        [companyId, jid, lid, phone, name]
+      );
+    }
+
     async function persistIncomingMessage({ phone, text, msgId, pushName }) {
       const variants = phoneVariants(phone);
       if (!variants.length) throw new Error('Telefone inválido na mensagem recebida');
@@ -463,6 +483,7 @@ async function connectWhatsApp(companyId) {
     // mapeia LID -> telefone real, persiste no DB, e corrige leads com LID errado
     async function resolveContact(contact) {
       if (!contact.id) return;
+      await persistWhatsAppContact(contact).catch(e => console.error('[WA] contact persist error:', e.message));
       let realPhone, lid;
 
       if (contact.id.endsWith('@s.whatsapp.net')) {

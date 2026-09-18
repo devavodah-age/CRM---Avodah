@@ -86,4 +86,49 @@ router.get('/suspicious-phones', async (req, res) => {
   }
 });
 
+router.get('/contacts', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, jid, lid, phone, name, imported_lead_id, first_seen_at, last_seen_at
+       FROM whatsapp_contacts WHERE company_id=$1 ORDER BY last_seen_at DESC LIMIT 2000`,
+      [req.companyId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/contacts/import', async (req, res) => {
+  const ids = Array.isArray(req.body.contactIds) ? req.body.contactIds : [];
+  if (!ids.length || ids.length > 500) return res.status(400).json({ error: 'Selecione entre 1 e 500 contatos.' });
+  const client = await pool.connect();
+  let imported = 0;
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT * FROM whatsapp_contacts WHERE company_id=$1 AND id=ANY($2::bigint[]) AND phone IS NOT NULL`,
+      [req.companyId, ids]
+    );
+    for (const contact of rows) {
+      const existing = await client.query(
+        `SELECT id FROM leads WHERE company_id=$1 AND REGEXP_REPLACE(phone,'[^0-9]','','g')=REGEXP_REPLACE($2,'[^0-9]','','g') LIMIT 1`,
+        [req.companyId, contact.phone]
+      );
+      let leadId = existing.rows[0]?.id;
+      if (!leadId) {
+        const lead = await client.query(
+          `INSERT INTO leads (company_id,name,phone,stage) VALUES ($1,$2,$3,'novo') RETURNING id`,
+          [req.companyId, contact.name || contact.phone, contact.phone]
+        );
+        leadId = lead.rows[0].id;
+        await client.query(`INSERT INTO messages (lead_id,from_type,text) VALUES ($1,'system','Contato importado do WhatsApp')`, [leadId]);
+        imported++;
+      }
+      await client.query('UPDATE whatsapp_contacts SET imported_lead_id=$1 WHERE id=$2', [leadId, contact.id]);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ ok: true, imported });
+  } catch (err) { await client.query('ROLLBACK').catch(() => {}); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
 module.exports = router;
