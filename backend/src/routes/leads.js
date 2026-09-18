@@ -3,6 +3,7 @@ const pool = require('../db');
 const { triggerAutomations } = require('../automationEngine');
 const { sendMessage, getStatus } = require('../whatsapp');
 const { fireLeadEvent } = require('../metaPixel');
+const { enqueueN8nEvent } = require('../n8nOutbox');
 const { ok, fail } = require('../lib/respond');
 
 const router = express.Router();
@@ -56,6 +57,9 @@ router.post('/', async (req, res) => {
     await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1, 'system', 'Lead criado manualmente')", [leadId]);
     const lead = (await pool.query('SELECT * FROM leads WHERE id = $1', [leadId])).rows[0];
     triggerAutomations(req.companyId, 'new_lead', { lead }).catch(console.error);
+    enqueueN8nEvent(req.companyId, 'new_lead', {
+      leadId: lead.id, name: lead.name, phone: lead.phone, source: 'manual',
+    }).catch(console.error);
     fireLeadEvent(req.companyId, lead).catch(console.error);
     ok(res, await attachMessages(lead), 201);
   } catch (err) {
@@ -74,6 +78,9 @@ router.patch('/:id/stage', async (req, res) => {
 
     await pool.query('UPDATE leads SET stage = $1 WHERE id = $2', [stage, lead.id]);
     triggerAutomations(req.companyId, 'stage_changed', { lead: { ...lead, stage }, stage }).catch(console.error);
+    enqueueN8nEvent(req.companyId, 'stage_changed', {
+      leadId: lead.id, previousStage: lead.stage, stage,
+    }).catch(console.error);
 
     const updated = (await pool.query('SELECT * FROM leads WHERE id = $1', [lead.id])).rows[0];
     ok(res, { lead: await attachMessages(updated), automationTriggered: null });
@@ -120,10 +127,15 @@ router.post('/import', async (req, res) => {
     if (!row.name || !row.name.trim()) continue;
     try {
       const result = await pool.query(
-        "INSERT INTO leads (company_id, name, company_name, phone, value, stage) VALUES ($1,$2,$3,$4,$5,'novo') RETURNING id",
+        "INSERT INTO leads (company_id, name, company_name, phone, value, stage) VALUES ($1,$2,$3,$4,$5,'novo') RETURNING *",
         [req.companyId, row.name.trim(), row.company_name || null, row.phone || null, Number(row.value) || 0]
       );
-      await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system','Lead importado via CSV')", [result.rows[0].id]);
+      const lead = result.rows[0];
+      await pool.query("INSERT INTO messages (lead_id, from_type, text) VALUES ($1,'system','Lead importado via CSV')", [lead.id]);
+      await triggerAutomations(req.companyId, 'new_lead', { lead });
+      await enqueueN8nEvent(req.companyId, 'new_lead', {
+        leadId: lead.id, name: lead.name, phone: lead.phone, source: 'csv',
+      });
       imported++;
     } catch (e) { /* skip row on error */ }
   }

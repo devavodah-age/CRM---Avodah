@@ -3,6 +3,49 @@ const pool = require('../db');
 
 const router = express.Router();
 
+router.get('/status', async (req, res) => {
+  try {
+    const [jobCounts, failedJobs, eventCounts, failedEvents] = await Promise.all([
+      pool.query(
+        `SELECT status, COUNT(*)::int AS count FROM automation_jobs
+         WHERE company_id=$1 GROUP BY status`,
+        [req.companyId]
+      ),
+      pool.query(
+        `SELECT j.id, j.lead_id, j.attempts, j.last_error, j.created_at, a.name AS automation_name
+         FROM automation_jobs j JOIN automations a ON a.id=j.automation_id
+         WHERE j.company_id=$1 AND j.status='failed'
+         ORDER BY j.id DESC LIMIT 20`,
+        [req.companyId]
+      ),
+      pool.query(
+        `SELECT status, COUNT(*)::int AS count FROM integration_events
+         WHERE company_id=$1 GROUP BY status`,
+        [req.companyId]
+      ),
+      pool.query(
+        `SELECT id, event_type, attempts, last_error, created_at
+         FROM integration_events WHERE company_id=$1 AND status='failed'
+         ORDER BY id DESC LIMIT 20`,
+        [req.companyId]
+      ),
+    ]);
+    res.json({
+      automationJobs: {
+        counts: Object.fromEntries(jobCounts.rows.map(row => [row.status, row.count])),
+        failed: failedJobs.rows,
+      },
+      n8nEvents: {
+        counts: Object.fromEntries(eventCounts.rows.map(row => [row.status, row.count])),
+        failed: failedEvents.rows,
+      },
+    });
+  } catch (e) {
+    console.error('[Automations] status error:', e.message);
+    res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(

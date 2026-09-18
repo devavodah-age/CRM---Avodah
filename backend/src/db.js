@@ -98,6 +98,27 @@ async function initDb() {
   // Add attempts column for job retry tracking
   await pool.query(`
     ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+    ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS last_error TEXT;
+    ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+  `).catch(() => {});
+  // Outbox persistente para eventos enviados ao n8n
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS integration_events (
+      id BIGSERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      locked_at TIMESTAMPTZ,
+      last_error TEXT,
+      delivered_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS integration_events_pending_idx
+      ON integration_events(run_at) WHERE status = 'pending';
   `).catch(() => {});
   // Persist LID→phone map across restarts
   await pool.query(`
@@ -154,6 +175,10 @@ async function initDb() {
   console.log('Banco inicializado.');
 }
 
-initDb().catch(console.error);
+// Em testes sem banco configurado, não inicia uma conexão implícita com localhost.
+// As suítes de integração usam TEST_DATABASE_URL quando disponível.
+if (process.env.NODE_ENV !== 'test' || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL) {
+  initDb().catch(console.error);
+}
 
 module.exports = pool;
